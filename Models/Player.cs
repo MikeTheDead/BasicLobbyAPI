@@ -1,7 +1,26 @@
-﻿namespace LobbyAPI.Models;
+﻿using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
+using System.Text.Json.Serialization; // Import for JsonPropertyName
+
+namespace LobbyAPI.Models;
 
 public class Player
 {
-    public string playerName { get; set; } = "player";
+    [BsonId]
+    [JsonPropertyName("_id")] // Ensure this matches with JSON field names if necessary
+    public ObjectId _id { get; set; } = ObjectId.GenerateNewId();
+
+    [BsonElement("playerName")]
+    [JsonPropertyName("playerName")]
+    public string playerName { get; set; }
+
+    [BsonElement("key")]
+    [JsonPropertyName("key")]
     public string key { get; set; }
+
+    public Player(string playerName = "player", string key = null)
+    {
+        this.playerName = playerName;
+        this.key = key ?? Guid.NewGuid().ToString();
+    }
 }

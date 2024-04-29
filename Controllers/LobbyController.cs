@@ -1,25 +1,30 @@
 ﻿using LobbyAPI.Interfaces;
+using LobbyAPI.Middlewares;
 using LobbyAPI.Models;
+using LobbyAPI.Utilities;
 using Microsoft.AspNetCore.Mvc;
-using Raven.Client.Documents;
 
 namespace LobbyAPI.Controllers;
 
 [ApiController]
 [Route("lobby")]
+[ValidateSession]
 public class LobbyController : ControllerBase
 {
     private readonly ILogger<LobbyController> _logger;
     private readonly ILobbyRepository _lobbyRepo;
     private readonly IPasswordRepository _pwdRepo;
-    private readonly IPlayerRepository _playerKVPRepo;
+    private readonly IPlayerRepository playerRepo;
+    private readonly ISessionRepository sessionRepo;
 
-    public LobbyController(ILogger<LobbyController> logger, ILobbyRepository lobbyRepo, IPasswordRepository pwdRepo, IPlayerRepository playerKvpRepo)
+    public LobbyController(ILogger<LobbyController> logger, ILobbyRepository lobbyRepo, IPasswordRepository pwdRepo, IPlayerRepository _playerRepo,
+        ISessionRepository _sessionRepo)
     {
         _logger = logger;
         _lobbyRepo = lobbyRepo;
         _pwdRepo = pwdRepo;
-        _playerKVPRepo = playerKvpRepo;
+        playerRepo = _playerRepo;
+        sessionRepo = _sessionRepo;
     }
 
 
@@ -55,13 +60,22 @@ public class LobbyController : ControllerBase
     {
         try
         {
-            //identifier
-            NewLobby.Host.key = Guid.NewGuid().ToString();
+            HttpContext.Request.Headers.TryGetValue("sessionId", out var sessionId);
+            
+            if (string.IsNullOrEmpty(sessionId))
+            {
+                return Unauthorized("Session ID not found.");
+            }
+
+            Session session = await sessionRepo.Get(sessionId);
+            NewLobby.Host = session.player;
+            Console.WriteLine(session.player.playerName);
+            NewLobby.ConnectionIdentifier = RandomStringGenerator.GenerateRandomString();
             bool status = await _lobbyRepo.CreateLobbyAsync(NewLobby,password);
             if (status)
             {
-                NewLobby.Players.Add(NewLobby.Host);
-                return Ok(_playerKVPRepo.CreatePlayer(NewLobby.Host));
+                //NewLobby.Players.Add(NewLobby.Host);
+                return Ok();
             }
 
             return Conflict($"The name {NewLobby.LobbyName} is already in-use.");
@@ -109,7 +123,7 @@ public class LobbyController : ControllerBase
             bool updateStatus = await _lobbyRepo.UpdateLobbyAsync(lobby);
             if (updateStatus)
             {
-                return Ok(_playerKVPRepo.CreatePlayer(player));
+                return Ok(playerRepo.CreatePlayer(player));
             }
 
             return StatusCode(500, "Failed to join the lobby.");
@@ -131,17 +145,25 @@ public class LobbyController : ControllerBase
             {
                 return NotFound($"Lobby {lobbyName} not found.");
             }
-            Player player = await _playerKVPRepo.GetPlayer(token);
-            
-            if (lobby.Players.Any(p => p.playerName == player.playerName))
+            Session? session = await playerRepo.GetPlayer(token);
+            if (session == null)
             {
-                lobby.Players.Remove(player);
+                return NotFound("Session not found.");
+            }
+
+            Player player = session.player;
+            if (lobby.Players.Any(p => p.key == player.key))
+            {
+                var updatedPlayers = lobby.Players.Where(p => p.key != player.key).ToList();
+                lobby.Players = updatedPlayers;  // Assigning a new list might help
+                Console.WriteLine($"removed {player.playerName}, updating lobby");
                 bool updateStatus = await _lobbyRepo.UpdateLobbyAsync(lobby);
                 if (updateStatus)
                 {
-                    return Ok(await _playerKVPRepo.DisposePlayer(token,player));
+                    return Ok();
                 }
             }
+
 
             return StatusCode(500, "You're not in that lobby");
         }
@@ -160,8 +182,7 @@ public class LobbyController : ControllerBase
         try
         {
             var lobby = await _lobbyRepo.GetLobbyAsync(lobbyName);
-            bool isHost = await _playerKVPRepo.ValidPlayer(token, lobby.Host);
-            if (!isHost)
+            if (!await isHost(token,lobby))
             {
                 return BadRequest("You are not the host.");
             }
@@ -180,8 +201,8 @@ public class LobbyController : ControllerBase
     {
         try
         {
-            bool isHost = await _playerKVPRepo.ValidPlayer(token, newLobby.Host);
-            if (!isHost)
+            
+            if (!await isHost(token,newLobby))
             {
                 return BadRequest("You are not the host.");
             }
@@ -194,6 +215,18 @@ public class LobbyController : ControllerBase
             _logger.LogError(ex, "Error retrieving lobbies.");
             return StatusCode(500, "An error occurred while retrieving lobbies.");
         }
+    }
+
+    private async Task<bool> isHost(string Token, Player Host)
+    {
+        bool isHost = await sessionRepo.Valid(Token,Host);
+        return isHost;
+    }
+
+    private async Task<bool> isHost(string Token, Lobby lobby)
+    {
+        bool isHost = await sessionRepo.Valid(Token,lobby.Host);
+        return isHost;
     }
 
 }

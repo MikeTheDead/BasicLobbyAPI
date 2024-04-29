@@ -1,6 +1,7 @@
 ﻿using LobbyAPI.Models;
+using LobbyAPI.MongoCollectionControllers;
+using LobbyAPI.MongoCollectionControllers.Interface;
 using Microsoft.AspNetCore.Mvc;
-using Raven.Client.Documents;
 
 namespace LobbyAPI.Repositories;
 using LobbyAPI.Interfaces;
@@ -8,57 +9,47 @@ using LobbyAPI.Interfaces;
 public class LobbyRepository : ILobbyRepository
 {
 
-    private readonly IDocumentStore _store;
-    private readonly IPasswordRepository _pwdRepo;
-    private readonly IPlayerRepository _playerKVP;
+    private readonly IMongoController<Lobby> lobbyMongoController;
+    private readonly IPasswordRepository passwordRepository;
 
-    public LobbyRepository(IDocumentStore store, IPasswordRepository pwdRepo, IPlayerRepository playerKVP)
+    public LobbyRepository(IMongoController<Lobby> lobby, IPasswordRepository _passwordRepository)
     {
-        _store = store;
-        _pwdRepo = pwdRepo;
-        _playerKVP = playerKVP;
+        lobbyMongoController = lobby;
+        passwordRepository = _passwordRepository;
     }
     
     
-    public async Task<Lobby> GetLobbyAsync(string name)
+    public async Task<Lobby> GetLobbyAsync(string connectionID)
     {
-        using (var session = _store.OpenAsyncSession())
-        {
-            return await session.LoadAsync<Lobby>(name);
-        }
+        return await lobbyMongoController.Get(connectionID);
     }
 
     public async Task<List<Lobby>> GetLobbiesAsync()
     {
-        using (var session = _store.OpenAsyncSession())
-        {
-            var lobbies = await session.Query<Lobby>().ToListAsync();
-            return lobbies;
-        }
-       
+        return await lobbyMongoController.GetAll();
+
     }
 
    
 
     public async Task<bool> CreateLobbyAsync(Lobby newLobby, string passkey = null)
     {
-        using (var session = _store.OpenAsyncSession())
+        Console.WriteLine("CreateLobbyAsync");
+        Lobby? existingLobby = await lobbyMongoController.Get(newLobby.ConnectionIdentifier);
+        if (existingLobby == null)
         {
-            var existingLobby = await session.LoadAsync<Lobby>(newLobby.LobbyName);
-            if (existingLobby == null)
+            Console.WriteLine("CreateLobbyAsync");
+            newLobby.Players = new List<Player>();
+            newLobby.Players.Add(newLobby.Host);
+            newLobby.Locked = false;
+            if (!string.IsNullOrEmpty(passkey))
             {
-                newLobby.Players = new List<Player>();
-                newLobby.Players.Add(newLobby.Host);
-                newLobby.Locked = false;
-                if (!string.IsNullOrEmpty(passkey))
-                {
-                    newLobby.Locked = true;
-                    await _pwdRepo.SetPassword(newLobby.LobbyName, passkey);
-                }
-                await session.StoreAsync(newLobby, newLobby.LobbyName);
-                await session.SaveChangesAsync();
-                return true;
+                newLobby.Locked = true;
+                await passwordRepository.SetPassword(newLobby.LobbyName, passkey);
             }
+
+            await lobbyMongoController.Set(newLobby);
+            return true;
         }
 
         return false;
@@ -67,33 +58,22 @@ public class LobbyRepository : ILobbyRepository
 
     public async Task<bool> UpdateLobbyAsync(Lobby newLobby)
     {
-        using (var session = _store.OpenAsyncSession())
+        Lobby? oldLobby = await lobbyMongoController.Get(newLobby.ConnectionIdentifier);
+        if (oldLobby != null)
         {
-            Lobby oldLobby = await session.LoadAsync<Lobby>(newLobby.LobbyName);
-            if (oldLobby != null)
-            {
-                oldLobby.Host = newLobby.Host;
-                oldLobby.LobbyName = newLobby.LobbyName;
-                oldLobby.Locked = newLobby.Locked;
-                oldLobby.Players = newLobby.Players;
-                
-                await session.SaveChangesAsync();
-                return true;
-            }
+            Console.WriteLine($"found {oldLobby.LobbyName} : {oldLobby.ConnectionIdentifier}");
+            await lobbyMongoController.Put(newLobby);
+            return true;
         }
         return false;
     }
-    public async Task<bool> DeleteLobbyAsync(string lobbyName)
+    public async Task<bool> DeleteLobbyAsync(string lobbyID)
     {
-        using (var session = _store.OpenAsyncSession())
+        var lobby = await lobbyMongoController.Get(lobbyID);
+        if (lobby != null)
         {
-            var lobby = await session.LoadAsync<Lobby>(lobbyName);
-            if (lobby != null)
-            {
-                session.Delete(lobby);
-                await session.SaveChangesAsync();
-                return true;
-            }
+            await lobbyMongoController.Remove(lobby);
+            return true;
         }
         return false;
     }

@@ -1,6 +1,8 @@
 ﻿using LobbyAPI.Interfaces;
 using LobbyAPI.Models;
-using Raven.Client.Documents;
+using LobbyAPI.MongoCollectionControllers;
+using LobbyAPI.MongoCollectionControllers.Interface;
+using MongoDB.Driver;
 
 namespace LobbyAPI.Repositories;
 
@@ -10,91 +12,88 @@ namespace LobbyAPI.Repositories;
 /// </summary>
 public class PlayerRepository : IPlayerRepository
 {
-
-    private readonly IDocumentStore _playerStore;
+    private readonly IMongoController<Player> playerMongoController;
+    private readonly IMongoController<PlayerKey> playerKeyMongoController;
     
-    public PlayerRepository(IDocumentStore playerStore)
+    public PlayerRepository(IMongoController<Player> _playerMongoController,IMongoController<PlayerKey> _playerKeyMongoController)
     {
-        _playerStore = playerStore;
+        playerMongoController = _playerMongoController;
+        playerKeyMongoController = _playerKeyMongoController;
     }
     
     
     /// <summary>
-    /// Create the player then send their security key for later requests
+    /// Create the player then send their player token.
+    /// the player token is called to retrieve the account at the start, then the session is used to make further requests
     /// </summary>
     /// <param name="player"></param>
     /// <returns></returns>
-    public string CreatePlayer(Player player)
+    public async Task<string> CreatePlayer(Player player)
     {
-        using (var session = _playerStore.OpenSession())
+        Console.WriteLine(player.key);
+        try
         {
-            Console.WriteLine(player.key);
-            bool existingPlayer = session.Query<PlayerKey>().Any(p => p.Player.key == player.key);
-            if (existingPlayer)
+            Player? existingPlayer = await playerMongoController.Get(player.key);
+            if (existingPlayer != null)
             {
-                return string.Empty;
+                if (!string.IsNullOrEmpty(existingPlayer.key))
+                {
+                    return existingPlayer.key;
+                }
             }
             var token = Guid.NewGuid().ToString();
-            session.Store(new PlayerKey(player, token), token);
-            session.SaveChanges();
+            var playerKey = new PlayerKey(player, token);
+            await playerKeyMongoController.Set(playerKey);
             return token;
         }
-    }
-
-    public async Task<bool> DisposePlayer(string token, Player player)
-    {
-        using (var session = _playerStore.OpenAsyncSession())
+        catch (Exception e)
         {
-            bool valid = await ValidPlayer(token, player);
-            if (valid)
-            {
-                session.Delete(GetPlayerKVP(token));
-                return true;
-            }
+            Console.WriteLine(e);
+            throw;
         }
-
-        return false;
     }
-    public async Task<bool> ValidPlayer(string token)
-    {
-        using (var session = _playerStore.OpenAsyncSession())
-        {
-            var playerKVP = await session.LoadAsync<PlayerKey>(token);
-            if (playerKVP != null)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    
+    /// <summary>
+    /// Validate the player
+    /// (fix later)
+    /// </summary>
+    /// <param name="token"></param>
+    /// <param name="player"></param>
+    /// <returns></returns>
     public async Task<bool> ValidPlayer(string token, Player player)
     {
-        using (var session = _playerStore.OpenAsyncSession())
+        var playerKVP = await playerKeyMongoController.Get(token);
+        if (playerKVP != null && playerKVP.Player.key == player.key)
         {
-            var playerKVP = await session.LoadAsync<PlayerKey>(token);
-            if (playerKVP != null && playerKVP.Player.key == player.key)
-            {
-                return true;
-            }
+            
         }
 
         return false;
     }
-    public async Task<PlayerKey> GetPlayerKVP(string token)
+    
+    /// <summary>
+    /// Once Login, retrieve player and turn it into a session
+    /// </summary>
+    /// <param name="token"></param>
+    /// <returns></returns>
+    public async Task<Session?> GetPlayer(string token)
     {
-        using (var session = _playerStore.OpenAsyncSession())
+        Console.WriteLine("playerKeyMongoController");
+        try
         {
-            var playerKVP = await session.LoadAsync<PlayerKey>(token);
-            return playerKVP;
+            var playerKVP = await playerKeyMongoController.Get(token);
+            var session = new Session(playerKVP.Player);
+            if (session != null)
+            {
+                Console.WriteLine("session");
+                return session;
+            }
+            return null;
         }
-    }
-    public async Task<Player> GetPlayer(string token)
-    {
-        using (var session = _playerStore.OpenAsyncSession())
+        catch (Exception e)
         {
-            var playerKVP = await session.LoadAsync<PlayerKey>(token);
-            return playerKVP.Player;
+            Console.WriteLine(e);
+            throw;
         }
     }
 }
