@@ -14,7 +14,8 @@ public class PlayerRepository : IPlayerRepository
 {
     private readonly IMongoController<Player> playerMongoController;
     private readonly IMongoController<PlayerKey> playerKeyMongoController;
-    
+    public IMongoCollection<Player> players;
+
     public PlayerRepository(IMongoController<Player> _playerMongoController,IMongoController<PlayerKey> _playerKeyMongoController)
     {
         playerMongoController = _playerMongoController;

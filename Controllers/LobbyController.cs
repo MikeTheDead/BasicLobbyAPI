@@ -3,6 +3,7 @@ using LobbyAPI.Middlewares;
 using LobbyAPI.Models;
 using LobbyAPI.Utilities;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 
 namespace LobbyAPI.Controllers;
 
@@ -12,10 +13,21 @@ namespace LobbyAPI.Controllers;
 public class LobbyController : ControllerBase
 {
     private readonly ILogger<LobbyController> _logger;
+
+    #region Hubs
+
+    // private IHubContext
+
+    #endregion
+    
+    #region Repos
+
     private readonly ILobbyRepository _lobbyRepo;
     private readonly IPasswordRepository _pwdRepo;
     private readonly IPlayerRepository playerRepo;
     private readonly ISessionRepository sessionRepo;
+
+    #endregion
 
     public LobbyController(ILogger<LobbyController> logger, ILobbyRepository lobbyRepo, IPasswordRepository pwdRepo, IPlayerRepository _playerRepo,
         ISessionRepository _sessionRepo)

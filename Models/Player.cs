@@ -14,6 +14,10 @@ public class Player
     [JsonPropertyName("playerName")]
     public string playerName { get; set; }
 
+    [BsonElement("connectionID")]
+    [JsonPropertyName("connectionID")]
+    public string connectionID { get; set; }
+    
     [BsonElement("key")]
     [JsonPropertyName("key")]
     public string key { get; set; }

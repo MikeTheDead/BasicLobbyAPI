@@ -11,6 +11,8 @@ public class Session
     [BsonId] public ObjectId _id { get; set; } = ObjectId.GenerateNewId();
     [BsonElement("sessionID")]
     public string SessionID { get; set; }
+    [BsonElement("connectionID")]
+    public string ConnectionID { get; set; }
     [BsonElement("player")]
     public Player player { get; set; }
 

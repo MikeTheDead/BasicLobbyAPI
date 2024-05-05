@@ -8,4 +8,5 @@ public interface ISessionRepository
     public Task<Session> Get(string sessionId);
     public Task SetSession(Session session);
     public Task EndSession(Session session);
+    public Task SetConnectionID(string sessionId, string connectionId);
 }

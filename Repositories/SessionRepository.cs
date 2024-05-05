@@ -39,6 +39,17 @@ public class SessionRepository : ISessionRepository
         }
         return session;
     }
+    public async Task SetConnectionID(string sessionId,string connectionId)
+    {
+        Console.WriteLine("SettConnID");
+        Session? session = await sessionMongoController.Get(sessionId);
+        if (session != null)
+        {
+            Console.WriteLine("SettConnID");
+            session.ConnectionID = connectionId;
+            await sessionMongoController.Put(session);
+        }
+    }
 
     public async Task SetSession(Session session)
     {
