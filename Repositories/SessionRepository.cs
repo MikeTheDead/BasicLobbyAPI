@@ -7,8 +7,8 @@ namespace LobbyAPI.Repositories;
 
 public class SessionRepository : ISessionRepository
 {
-    private readonly IMongoController<Session> sessionMongoController;
-    public SessionRepository(IMongoController<Session> _sessionMongoController)
+    private readonly IMongoSessionExtension sessionMongoController;
+    public SessionRepository(IMongoSessionExtension _sessionMongoController)
     {
         sessionMongoController = _sessionMongoController;
     }
@@ -49,6 +49,12 @@ public class SessionRepository : ISessionRepository
             session.ConnectionID = connectionId;
             await sessionMongoController.Put(session);
         }
+    }
+    public async Task UpdatePlayerName(Session _session)
+    {
+        Session session = await Get(_session.SessionID);
+        session.player.playerName = _session.player.playerName;
+        await sessionMongoController.SubmitPlayerUpdate(session);
     }
 
     public async Task SetSession(Session session)

@@ -37,9 +37,10 @@ public class PlayerRepository : IPlayerRepository
             Player? existingPlayer = await playerMongoController.Get(player.key);
             if (existingPlayer != null)
             {
+                var KVP = await playerKeyMongoController.Get(existingPlayer.key);
                 if (!string.IsNullOrEmpty(existingPlayer.key))
                 {
-                    return existingPlayer.key;
+                    return KVP.Token;
                 }
             }
             var token = Guid.NewGuid().ToString();
@@ -82,13 +83,29 @@ public class PlayerRepository : IPlayerRepository
         Console.WriteLine("playerKeyMongoController");
         try
         {
-            var playerKVP = await playerKeyMongoController.Get(token);
-            var session = new Session(playerKVP.Player);
-            if (session != null)
+            PlayerKey? playerKVP = null;
+            Session session = null;
+            try
             {
-                Console.WriteLine("session");
-                return session;
+                playerKVP = await playerKeyMongoController.Get(token);
             }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
+            if (playerKVP != null)
+            {
+                session = new Session(playerKVP.Player);
+                if (session != null)
+                {
+                    Console.WriteLine("session");
+                    playerKVP.CurrentSession = session;
+                    await playerKeyMongoController.Put(playerKVP);
+                    return session;
+                }
+            }
+            
             return null;
         }
         catch (Exception e)

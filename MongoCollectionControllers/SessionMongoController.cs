@@ -1,16 +1,19 @@
-﻿using LobbyAPI.Models;
+﻿using LobbyAPI.Interfaces;
+using LobbyAPI.Models;
 using LobbyAPI.MongoCollectionControllers.Interface;
 using MongoDB.Driver;
 
 namespace LobbyAPI.MongoCollectionControllers;
 
-public class SessionMongoController : IMongoController<Session>
+public class SessionMongoController : IMongoSessionExtension
 {
     private readonly IMongoCollection<Session> sessionCollection;
+    private readonly IMongoCollection<PlayerKey> KVPCollection;
 
-    public SessionMongoController(IMongoCollection<Session> _sessionCollection)
+    public SessionMongoController(IMongoCollection<Session> _sessionCollection, IMongoCollection<PlayerKey> _KVPCollection)
     {
         sessionCollection = _sessionCollection;
+        KVPCollection = _KVPCollection;
     }
     
     public async Task<Session?> Get(string value)
@@ -69,7 +72,23 @@ public class SessionMongoController : IMongoController<Session>
         }
     }
 
+    public async Task<PlayerKey> GetKVPOfSession(Session session)
+    {
+        
+        var filter = Builders<PlayerKey>.Filter.Eq(l => l.CurrentSession.SessionID, session.SessionID);
+        var result = await KVPCollection.Find(filter).FirstOrDefaultAsync();
 
+        return result;
+    }
+
+    public async Task SubmitPlayerUpdate(Session session)
+    {
+        await Put(session);
+        var KVP = await GetKVPOfSession(session);
+        var filter = Builders<PlayerKey>.Filter.Eq(l => l, KVP);
+        var update = Builders<PlayerKey>.Update.Set(l => l.Player, session.player);
+        await KVPCollection.UpdateOneAsync(filter, update);
+    }
 
     public async Task Remove(Session value)
     {

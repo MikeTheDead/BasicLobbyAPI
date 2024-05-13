@@ -119,6 +119,12 @@ public class ConnectionHub : Hub, IConnectionHub
             Console.WriteLine("player has no responses");
         }
     }
+    
+    public async Task UpdateDetails(Session session)
+    {
+        await _sessionRepository.UpdatePlayerName(session);
+        await Clients.Client(Context.ConnectionId).SendAsync("RefreshAccount", session.player);
+    }
 
     public async Task SendMessage(string sessionId, string message)
     {

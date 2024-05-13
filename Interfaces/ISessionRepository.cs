@@ -9,4 +9,5 @@ public interface ISessionRepository
     public Task SetSession(Session session);
     public Task EndSession(Session session);
     public Task SetConnectionID(string sessionId, string connectionId);
+    public Task UpdatePlayerName(Session session);
 }

@@ -35,7 +35,7 @@ builder.Services.AddSingleton<IMongoController<Player>,PlayerMongoController>();
 builder.Services.AddSingleton<IMongoController<PlayerKey>,PlayerKeyMongoController>();
 builder.Services.AddSingleton<IMongoController<Lobby>,LobbyMongoController>();
 builder.Services.AddSingleton<IMongoController<Password>,PasswordMongoController>();
-builder.Services.AddSingleton<IMongoController<Session>,SessionMongoController>();
+builder.Services.AddSingleton<IMongoSessionExtension,SessionMongoController>();
 builder.Services.AddSingleton<IMongoController<ConnectionAddress>,ConnectionAddressMongoController>();
 
 
@@ -47,13 +47,6 @@ builder.Services.AddSingleton<IMongoController<ConnectionAddress>,ConnectionAddr
 builder.Services.AddSingleton<IPasswordRepository, PasswordRepository>();
 
 SessionRepository session = null;
-builder.Services.AddSingleton<ISessionRepository>(s =>
-{
-    var sessionContoller = s.GetRequiredService<IMongoController<Session>>();
-    session = new SessionRepository(sessionContoller);
-    return session;
-});
-
 builder.Services.AddSingleton<IPlayerRepository>(s =>
 {
     var player = s.GetRequiredService<IMongoController<Player>>();
@@ -61,6 +54,14 @@ builder.Services.AddSingleton<IPlayerRepository>(s =>
 
     return new PlayerRepository(player,key);
 });
+builder.Services.AddSingleton<ISessionRepository>(s =>
+{
+    var sessionContoller = s.GetRequiredService<IMongoSessionExtension>();
+    session = new SessionRepository(sessionContoller);
+    return session;
+});
+
+
 builder.Services.AddSingleton<IConnectionAddressRepository>(s =>
 {
     var pkvpStore = s.GetRequiredService<IMongoController<ConnectionAddress>>();

@@ -10,6 +10,8 @@ public class PlayerKey
     public string Token { get; set; }
     [BsonElement("Player")]
     public Player Player { get; set; }
+    [BsonElement("currentSession")]
+    public Session CurrentSession { get; set; }
 
     public PlayerKey(Player player, string token)
     {

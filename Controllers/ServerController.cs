@@ -26,51 +26,45 @@ public class ServerController : ControllerBase
     
     
     [HttpGet("login")]
-    public async Task<ActionResult<Session>> Login([FromQuery]string token = null)
+    public async Task<ActionResult<Session>> Login([FromQuery] string token = null)
     {
         Console.WriteLine("Login");
         Session newSession = null;
         try
         {
-            bool newplayer = false;
             if (string.IsNullOrEmpty(token))
             {
-                Console.WriteLine("IsNullOrEmpty");
-                var newPlayer = new Player($"player {_globalRandom.NextInt64(1000, 9999)}");
-                token = await _playerRepo.CreatePlayer(newPlayer);
-                newplayer = true;
+                token = await newPlayer();
+            }
+
+            // Attempt to retrieve the session using the token
+            newSession = await _playerRepo.GetPlayer(token);
+            if (newSession == null)
+            {
+                Console.WriteLine("Non existent, making new player");
+                token = await newPlayer();
                 newSession = await _playerRepo.GetPlayer(token);
             }
-            else
-            {
-                try
-                {
-                    newSession = await _playerRepo.GetPlayer(token);
-                }
-                catch (Exception e)
-                {
-                    
-                }
-
-                if (newSession == null)
-                {
-                    return NotFound();
-                }
-            }
+        
             Console.WriteLine("GetPlayer");
-            if (newplayer)
-            {
-                _signals.ConnectionHub.QueueSession(token, newSession.SessionID);
-            }
+            _signals.ConnectionHub.QueueSession(token, newSession.SessionID);
             await _sessionRepo.SetSession(newSession);
             return newSession;
         }
         catch (Exception ex)
         {
-            
+            Console.WriteLine($"An error occurred: {ex}");
             return StatusCode(500, "An error occurred while logging in.");
         }
     }
+
+    async Task<string> newPlayer()
+    {
+        Console.WriteLine("IsNullOrEmpty");
+        var newPlayer = new Player($"player {_globalRandom.NextInt64(1000, 9999)}");
+        return await _playerRepo.CreatePlayer(newPlayer);
+    }
+
     [HttpGet("logout/{token}")]
     public async Task<ActionResult> Logout(string token)
     {
