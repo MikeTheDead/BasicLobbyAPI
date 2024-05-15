@@ -82,6 +82,7 @@ builder.Services.AddSingleton<ILobbyRepository>(s =>
 //still need to setup heartbeats
 builder.Services.AddSingleton<HubHandlerService>();
 builder.Services.AddSingleton<HeartbeatHub>();
+builder.Services.AddSingleton<LobbyHub>();
 
 builder.Services.AddSingleton<ConnectionHub>(s =>
 {
@@ -89,12 +90,19 @@ builder.Services.AddSingleton<ConnectionHub>(s =>
     var sessionRepo = s.GetRequiredService<ISessionRepository>();
     return new ConnectionHub(hubHandler, sessionRepo);
 });
+builder.Services.AddSingleton<LobbyHub>(s =>
+{
+    var sessionRepo = s.GetRequiredService<ISessionRepository>();
+    var connHub = s.GetRequiredService<ConnectionHub>();
+    return new LobbyHub(sessionRepo,connHub);
+});
 
 builder.Services.AddSingleton<SignalHubs>(s =>
 {
     var connectionHub = s.GetRequiredService<ConnectionHub>();
     var heartbeatHub = s.GetRequiredService<HeartbeatHub>();
-    return new SignalHubs(connectionHub, heartbeatHub);
+    var lobbyHub = s.GetRequiredService<LobbyHub>();
+    return new SignalHubs(connectionHub, heartbeatHub, lobbyHub);
 });
 builder.Services.AddSingleton<ISessionRepository, SessionRepository>();
 

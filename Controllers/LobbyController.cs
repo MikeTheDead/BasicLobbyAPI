@@ -1,6 +1,7 @@
 ﻿using LobbyAPI.Interfaces;
 using LobbyAPI.Middlewares;
 using LobbyAPI.Models;
+using LobbyAPI.SignalRHubs;
 using LobbyAPI.Utilities;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -13,12 +14,7 @@ namespace LobbyAPI.Controllers;
 public class LobbyController : ControllerBase
 {
     private readonly ILogger<LobbyController> _logger;
-
-    #region Hubs
-
-    // private IHubContext
-
-    #endregion
+    private readonly SignalHubs Hubs;
     
     #region Repos
 
@@ -30,13 +26,14 @@ public class LobbyController : ControllerBase
     #endregion
 
     public LobbyController(ILogger<LobbyController> logger, ILobbyRepository lobbyRepo, IPasswordRepository pwdRepo, IPlayerRepository _playerRepo,
-        ISessionRepository _sessionRepo)
+        ISessionRepository _sessionRepo, SignalHubs _hubs)
     {
         _logger = logger;
         _lobbyRepo = lobbyRepo;
         _pwdRepo = pwdRepo;
         playerRepo = _playerRepo;
         sessionRepo = _sessionRepo;
+        Hubs = _hubs;
     }
 
 
@@ -67,35 +64,48 @@ public class LobbyController : ControllerBase
         }
     }
     
-    [HttpPost("lobby")]
+    [HttpPost("new")]
     public async Task<ActionResult> CreateLobby([FromBody] Lobby NewLobby, [FromQuery] string? password = null)
     {
+        Console.WriteLine($"CreateLobby {NewLobby.LobbyName}");
         try
         {
             HttpContext.Request.Headers.TryGetValue("sessionId", out var sessionId);
-            
+        
             if (string.IsNullOrEmpty(sessionId))
             {
                 return Unauthorized("Session ID not found.");
             }
 
-            Session session = await sessionRepo.Get(sessionId);
+            var session = await sessionRepo.Get(sessionId);
+            if (session == null)
+            {
+                return Unauthorized("Invalid session ID.");
+            }
+
             NewLobby.Host = session.player;
+            if (NewLobby.Host == null)
+            {
+                return BadRequest("Session has no associated player.");
+            }
+
             Console.WriteLine(session.player.playerName);
             NewLobby.ConnectionIdentifier = RandomStringGenerator.GenerateRandomString();
-            bool status = await _lobbyRepo.CreateLobbyAsync(NewLobby,password);
+        
+            bool status = await _lobbyRepo.CreateLobbyAsync(NewLobby, password);
             if (status)
             {
-                //NewLobby.Players.Add(NewLobby.Host);
+                var _lobby = await _lobbyRepo.GetLobbyAsync(NewLobby.ConnectionIdentifier);
+                await Hubs.LobbyHub.LobbyJoin(_lobby, sessionId);
                 return Ok();
             }
 
-            return Conflict($"The name {NewLobby.LobbyName} is already in-use.");
+            return Conflict($"The name {NewLobby.LobbyName} is already in use.");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving lobbies.");
-            return StatusCode(500, "An error occurred while retrieving lobbies.");
+            _logger.LogError(ex, "Error creating lobby");
+            return StatusCode(500, "An error occurred while creating the lobby.");
         }
     }
     

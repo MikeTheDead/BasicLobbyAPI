@@ -35,7 +35,7 @@ public class SessionMongoController : IMongoSessionExtension
         await sessionCollection.InsertOneAsync(value);
     }
 
-    public async Task Put(Session value)
+    public async Task PutConnectionID(Session value)
     {
         try
         {
@@ -50,13 +50,24 @@ public class SessionMongoController : IMongoSessionExtension
             var update = Builders<Session>.Update.Set(l => l.ConnectionID, value.ConnectionID);
             var updateResult = await sessionCollection.UpdateOneAsync(filter, update);
 
+            Console.WriteLine($"Matched Count: {updateResult.MatchedCount}, Modified Count: {updateResult.ModifiedCount}");
+
             if (updateResult.ModifiedCount == 0)
             {
                 Console.WriteLine("No documents were modified. Checking if the session exists with the same ConnectionID.");
                 var existingSession = await sessionCollection.Find(filter).FirstOrDefaultAsync();
                 if (existingSession != null)
                 {
-                    Console.WriteLine($"Existing ConnectionID: {existingSession.ConnectionID}");
+                    if (existingSession.ConnectionID == value.ConnectionID)
+                    {
+                        await sessionCollection.UpdateOneAsync(filter, update);
+                        Console.WriteLine($"Existing Session found with the same ConnectionID: {existingSession.ConnectionID}. No update necessary.");
+                        return; // No update necessary
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Existing ConnectionID: {existingSession.ConnectionID}");
+                    }
                 }
                 else
                 {
@@ -72,22 +83,95 @@ public class SessionMongoController : IMongoSessionExtension
         }
     }
 
+    public async Task PutPlayer(Session value)
+    {
+        try
+        {
+            if (value == null)
+            {
+                throw new ArgumentNullException(nameof(value), "Session value cannot be null.");
+            }
+
+            Console.WriteLine($"Attempting to update SessionID: {value.SessionID} with new Player: {value.player.playerName}");
+
+            var filter = Builders<Session>.Filter.Eq(l => l.SessionID, value.SessionID);
+            var update = Builders<Session>.Update.Set(l => l.player, value.player);
+            var updateResult = await sessionCollection.UpdateOneAsync(filter, update);
+            Console.WriteLine($"Matched Count: {updateResult.MatchedCount}, Modified Count: {updateResult.ModifiedCount}");
+
+            if (updateResult.ModifiedCount == 0)
+            {
+                Console.WriteLine("No documents were modified. Checking if the session exists with the same player.");
+
+                var existingSession = await sessionCollection.Find(filter).FirstOrDefaultAsync();
+                if (existingSession != null)
+                {
+                    if (existingSession.player.Equals(value.player))
+                    {
+                        Console.WriteLine($"Player is already named {value.player.playerName}. No update necessary.");
+                        return; // No update necessary
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Session not found.");
+                }
+                throw new InvalidOperationException("Session not found or not modified.");
+            }
+            await UpdatePlayerKey(value);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"An error occurred: {ex.Message}");
+            throw;
+        }
+    }
+
+
+
+    public async Task UpdatePlayerKey(Session session)
+    {
+        try
+        {
+            var kvp = await GetKVPOfSession(session);
+            if (kvp == null)
+            {
+                Console.WriteLine($"No PlayerKey found for SessionID: {session.SessionID}");
+                return; // Or handle this case as necessary
+            }
+
+            var filter = Builders<PlayerKey>.Filter.Eq(l => l.Token, kvp.Token);
+            var update = Builders<PlayerKey>.Update.Set(l => l.Player, session.player);
+            var updateResult = await KVPCollection.UpdateOneAsync(filter, update);
+        
+            Console.WriteLine($"PlayerKey update - Matched Count: {updateResult.MatchedCount}, Modified Count: {updateResult.ModifiedCount}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"An error occurred in UpdatePlayerKey: {ex.Message}");
+            throw;
+        }
+    }
+
+    
     public async Task<PlayerKey> GetKVPOfSession(Session session)
     {
-        
         var filter = Builders<PlayerKey>.Filter.Eq(l => l.CurrentSession.SessionID, session.SessionID);
         var result = await KVPCollection.Find(filter).FirstOrDefaultAsync();
+
+        if (result == null)
+        {
+            Console.WriteLine($"No PlayerKey found for SessionID: {session.SessionID}");
+        }
 
         return result;
     }
 
+
     public async Task SubmitPlayerUpdate(Session session)
     {
-        await Put(session);
-        var KVP = await GetKVPOfSession(session);
-        var filter = Builders<PlayerKey>.Filter.Eq(l => l, KVP);
-        var update = Builders<PlayerKey>.Update.Set(l => l.Player, session.player);
-        await KVPCollection.UpdateOneAsync(filter, update);
+        await PutPlayer(session);
+        
     }
 
     public async Task Remove(Session value)

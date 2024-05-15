@@ -9,4 +9,6 @@ public interface IConnectionHub
     Task SendToken(string sessionId);
     Task ConfirmRequest(ClientResponse response);
     Task UpdateDetails(Session session);
+    Task SessionUpdate(string sessionId);
+    Task SendLobby(string connId, Lobby lobby);
 }

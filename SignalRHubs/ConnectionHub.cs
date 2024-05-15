@@ -4,6 +4,7 @@ using LobbyAPI.Repositories;
 using LobbyAPI.Utilities;
 using Microsoft.AspNetCore.SignalR;
 using MongoDB.Driver;
+using Newtonsoft.Json;
 
 namespace LobbyAPI.SignalRHubs;
 
@@ -44,8 +45,9 @@ public class ConnectionHub : Hub, IConnectionHub
         {
             Console.WriteLine($"Not queued, player exists");
         }
+
         
-        await _sessionRepository.SetConnectionID(sessionId, Context.ConnectionId);
+        //await SendToken(sessionId);
         await TryConnection(sessionId);
         await base.OnConnectedAsync();
     }
@@ -133,10 +135,6 @@ public class ConnectionHub : Hub, IConnectionHub
         
         await Clients.Client(user.ConnectionID).SendAsync("ReceiveMessage", message);
     }
-
-
-
-
     public void QueueSession(string token,string sessionId)
     {
         Console.WriteLine($"Queue session {sessionId}:{token}");
@@ -147,6 +145,22 @@ public class ConnectionHub : Hub, IConnectionHub
         });
     }
 
+    public async Task SendLobby(string connId, Lobby lobby)
+    {
+        await Clients.Client(connId).SendAsync("EnterLobby", lobby);
+    }
+    
+    public async Task SessionUpdate(string sessionId)
+    {
+        var session = await _sessionRepository.SetConnectionID(sessionId, Context.ConnectionId);
+        
+        string json = JsonConvert.SerializeObject(session);
+        Console.WriteLine($"sending sessionUpdate {session.ConnectionID}");
+        session._id = null;
+        await Clients.Client(session.ConnectionID).SendAsync("UpdateSession", json);
+        Console.WriteLine("UpdateSession message sent");
+    }
+    
     public async Task EnsureRequest(string method, string sessionId, Func<Task> onSucceeded, Func<Task> onTimeout, int timeoutSeconds = 1)
     {
         Console.WriteLine("EnsureRequest");

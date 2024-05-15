@@ -18,6 +18,6 @@ public class Lobby
     [BsonElement("players")]
     public List<Player> Players { get; set; }
     [BsonElement("connectionIdentifier")]
-    public string ConnectionIdentifier { get; set; }
+    public string? ConnectionIdentifier { get; set; }
     
 }
