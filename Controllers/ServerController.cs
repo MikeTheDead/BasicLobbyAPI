@@ -39,7 +39,7 @@ public class ServerController : ControllerBase
                 token = await newPlayer();
             }
 
-            // Attempt to retrieve the session using the token
+            //attempt to retrieve the session using the token
             newSession = await _playerRepo.GetPlayer(token);
             if (newSession == null)
             {

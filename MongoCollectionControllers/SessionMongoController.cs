@@ -62,7 +62,7 @@ public class SessionMongoController : IMongoSessionExtension
                     {
                         await sessionCollection.UpdateOneAsync(filter, update);
                         Console.WriteLine($"Existing Session found with the same ConnectionID: {existingSession.ConnectionID}. No update necessary.");
-                        return; // No update necessary
+                        return; 
                     }
                     else
                     {
@@ -109,7 +109,7 @@ public class SessionMongoController : IMongoSessionExtension
                     if (existingSession.player.Equals(value.player))
                     {
                         Console.WriteLine($"Player is already named {value.player.playerName}. No update necessary.");
-                        return; // No update necessary
+                        return;
                     }
                 }
                 else
@@ -138,7 +138,7 @@ public class SessionMongoController : IMongoSessionExtension
             if (kvp == null)
             {
                 Console.WriteLine($"No PlayerKey found for SessionID: {session.SessionID}");
-                return; // Or handle this case as necessary
+                return; 
             }
 
             var filter = Builders<PlayerKey>.Filter.Eq(l => l.Token, kvp.Token);

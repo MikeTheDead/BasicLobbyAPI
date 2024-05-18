@@ -5,7 +5,8 @@ using MongoDB.Bson.Serialization.Attributes;
 namespace LobbyAPI.Models;
 
 /// <summary>
-/// Store IP address separately 
+///store IP address separately till host broadcasts it
+/// (i plan to use a transport layer this is just easier rn)
 /// </summary>
 public class ConnectionAddress
 {

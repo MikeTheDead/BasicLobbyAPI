@@ -9,7 +9,7 @@ using Newtonsoft.Json;
 namespace LobbyAPI.SignalRHubs;
 
 /// <summary>
-/// Entry hub for delegating callbacks to their respective operations
+///we use one entry hub since managing multiple connection ids is stupid
 /// </summary>
 public class ConnectionHub : Hub, IConnectionHub
 {
@@ -30,7 +30,7 @@ public class ConnectionHub : Hub, IConnectionHub
 
     public async Task Connect(string sessionId)
     {
-        // Your existing connect logic
+        //idfk what was supposed to be here
     }
 
     public override async Task OnConnectedAsync()
