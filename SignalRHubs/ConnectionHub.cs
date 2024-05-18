@@ -4,198 +4,120 @@ using LobbyAPI.Repositories;
 using LobbyAPI.Utilities;
 using Microsoft.AspNetCore.SignalR;
 using MongoDB.Driver;
+using Newtonsoft.Json;
 
 namespace LobbyAPI.SignalRHubs;
 
 /// <summary>
-/// Signal hub that handles login and 
+///we use one entry hub since managing multiple connection ids is stupid
 /// </summary>
 public class ConnectionHub : Hub, IConnectionHub
 {
-    private readonly HubHandlerService _hubHandlerService;
-    private readonly ISessionRepository _sessionRepository;
+    private readonly IHubOperations _hubOperations;
+    private Repositories.Repositories Repos;
     private int tries = 0;
-    public ConnectionHub(HubHandlerService hubHandlerService, ISessionRepository sessionRepository)
+
+    public ConnectionHub(IHubOperations hubOperations)
     {
-        _hubHandlerService = hubHandlerService;
-        _sessionRepository = sessionRepository;
+        _hubOperations = hubOperations;
+        Repos = _hubOperations.RepoManager;
     }
 
-    
-    
-    
-    public async Task LobbyJoined(Player player,string lobbyName)
+    public async Task LobbyJoined(Player player, string lobbyName)
     {
-        await Groups.AddToGroupAsync(player.connectionID, lobbyName);
-        Console.WriteLine("");
+        await _hubOperations.LobbyJoined(player.connectionID, lobbyName);
     }
 
     public async Task Connect(string sessionId)
     {
-       
+        //idfk what was supposed to be here
     }
-    
+
     public override async Task OnConnectedAsync()
     {
         tries = 0;
         var sessionId = Context.GetHttpContext().Request.Query["sessionId"];
-        var session = _hubHandlerService.Queue.FirstOrDefault(s => s.SessionId == sessionId);
+        var session = _hubOperations.HubHandler.Queue.FirstOrDefault(s => s.SessionId == sessionId);
         if (session == null)
         {
             Console.WriteLine($"Not queued, player exists");
         }
-        
-        await _sessionRepository.SetConnectionID(sessionId, Context.ConnectionId);
+
         await TryConnection(sessionId);
         await base.OnConnectedAsync();
     }
 
     async Task TryConnection(string sessionId)
     {
-        if (tries <= 5)
-        {
-            tries++;
-            await Clients.Client(Context.ConnectionId).SendAsync("Connected", "You are connected.");
-            await EnsureRequest("Connected", sessionId, 
-                async () => await SendMessage(sessionId, "Ping"), 
-                async () => await TryConnection(sessionId),
-                1);
-        }
-        else
-        {
-            Console.WriteLine("TryConnection called too many times");
-        }
-        
+        await _hubOperations.TryConnection(sessionId, Clients, Context);
     }
-    
-    
+
     public async Task SendToken(string sessionId)
     {
-        Console.WriteLine($"SendToken:{sessionId}");
-        try
-        {
-            var session = _hubHandlerService.Queue.FirstOrDefault(s => s.SessionId == sessionId);
-            if (session != null)
-            {
-                await Clients.Client(Context.ConnectionId).SendAsync("Token", session.Token);
-            }
-            else
-            {
-                Console.WriteLine($"No session found for ID: {sessionId}");
-                await Clients.Client(Context.ConnectionId).SendAsync("Error", "Session not found.");
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Exception in SendToken: {ex.Message}");
-            await Clients.Client(Context.ConnectionId).SendAsync("Error", "An error occurred on the server.");
-        }
+        await _hubOperations.SendToken(Context.ConnectionId, sessionId);
     }
 
     public async Task ConfirmRequest(ClientResponse response)
     {
-        if (!await _hubHandlerService.TryExecuteConfirmation(response))
-        {
-            Console.WriteLine("Confirmation failed or no action found.");
-        }
-        var clientResponses =
-            _hubHandlerService.RequestConfirmations.Where(r => r.Key.SessionId == response.SessionId);
-        if (clientResponses.Any())
-        {
-            var Response = clientResponses.FirstOrDefault(r
-                => r.Key.Method == response.Method);
-            if (_hubHandlerService.RequestConfirmations.TryGetValue(Response.Key, out Func<Task> action))
-            {
-                await action();
-            }
-            else
-            {
-                Console.WriteLine("Response not found.");
-            }
-        }
-        else
-        {
-            
-            Console.WriteLine("player has no responses");
-        }
+        await _hubOperations.ConfirmRequest(response);
     }
-    
+
     public async Task UpdateDetails(Session session)
     {
-        await _sessionRepository.UpdatePlayerName(session);
-        await Clients.Client(Context.ConnectionId).SendAsync("RefreshAccount", session.player);
+        await _hubOperations.UpdateDetails(session);
     }
 
     public async Task SendMessage(string sessionId, string message)
     {
-        Console.WriteLine($"SendMessage {sessionId}");
-        Session user = await _sessionRepository.Get(sessionId);
-        
-        await Clients.Client(user.ConnectionID).SendAsync("ReceiveMessage", message);
+        var user = await Repos.SessionRepo.Get(sessionId);
+        await _hubOperations.SendMessage(user.ConnectionID, message);
     }
 
-
-
-
-    public void QueueSession(string token,string sessionId)
+    public void QueueSession(string token, string sessionId)
     {
         Console.WriteLine($"Queue session {sessionId}:{token}");
-        _hubHandlerService.Queue.Add(new SessionQueue
+        _hubOperations.HubHandler.Queue.Add(new SessionQueue
         {
             SessionId = sessionId,
             Token = token
         });
     }
-
-    public async Task EnsureRequest(string method, string sessionId, Func<Task> onSucceeded, Func<Task> onTimeout, int timeoutSeconds = 1)
+    public async Task EnterLobby(string lobbyName)
     {
-        Console.WriteLine("EnsureRequest");
-        var clientResponse = new ClientResponse { Method = method, SessionId = sessionId };
-        var cts = new CancellationTokenSource();
-
-        if (!_hubHandlerService.RequestConfirmations.ContainsKey(clientResponse))
-        {
-            _hubHandlerService.RequestConfirmations.Add(clientResponse, async () =>
-            {
-                if (!cts.IsCancellationRequested)
-                {
-                    cts.Cancel();  // Cancel the timeout task
-                    await onSucceeded();
-                }
-            });
-
-            // Schedule the timeout task
-            Task.Delay(TimeSpan.FromSeconds(timeoutSeconds), cts.Token)
-                .ContinueWith(async t =>
-                {
-                    if (!t.IsCanceled)
-                    {
-                        _hubHandlerService.RequestConfirmations.Remove(clientResponse);
-                        await onTimeout();
-                    }
-                }, TaskScheduler.Default);
-        }
-        else
-        {
-            // Handle the case where the key already exists
-            _hubHandlerService.RequestConfirmations[clientResponse] = async () =>
-            {
-                if (!cts.IsCancellationRequested)
-                {
-                    cts.Cancel();  // Cancel the timeout task
-                    await onSucceeded();
-                }
-            };
-            Console.WriteLine("Warning: Overwriting an existing request confirmation action.");
-        }
+        await _hubOperations.EnterLobby(lobbyName, Context);
     }
 
-
-    
-    
-    public Task SendLobbyJoin(Lobby lobby)
+    public async Task BroadcastLobbyHostname(string lobbyName, string hostToken)
     {
-        throw new NotImplementedException();
+        //basic security checks
+        var session = await Repos.PlayerRepo.GetPlayer(hostToken);
+        var lobby = await Repos.LobbyRepo.GetLobbyAsync(lobbyName);
+        if (session != null && lobby != null)
+        {
+            if (lobby.Host.key == session.player.key)
+            {
+                var address = await Repos.ConAddRepo.GetPair(lobby.ConnectionIdentifier);
+                if (address != null)
+                {
+                    await _hubOperations.BroadcastLobbyHostname(address.IPAddress, lobby);
+                }
+            }
+        }
+        
+        
+    }
+    public async Task LeaveLobby(string lobbyName)
+    {
+        Console.WriteLine(lobbyName);
+        await _hubOperations.LeaveLobby(lobbyName, Context);
+    }
+    public async Task SendLobby(string connId, Lobby lobby)
+    {
+        await _hubOperations.SendLobby(connId, lobby, Clients,Context);
     }
 
+    public async Task SessionUpdate(string sessionId)
+    {
+        await _hubOperations.SessionUpdate(sessionId, Context.ConnectionId);
+    }
 }

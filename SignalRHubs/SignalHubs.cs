@@ -1,15 +1,20 @@
-﻿namespace LobbyAPI.SignalRHubs;
+﻿using LobbyAPI.Models;
+using Microsoft.AspNetCore.SignalR;
+
+namespace LobbyAPI.SignalRHubs;
 
 public class SignalHubs
 {
 
-    public readonly ConnectionHub ConnectionHub;
-    public readonly HeartbeatHub HeartbeatHub;
-    
-    
-    public SignalHubs(ConnectionHub _connectionHub, HeartbeatHub _heartbeatHub)
+    public IHubContext<ConnectionHub> ConnectionHubContext { get; }
+    public IConnectionHub ConHub { get; }
+
+    public SignalHubs(IHubContext<ConnectionHub> connectionHubContext,IConnectionHub conHub)
     {
-        ConnectionHub = _connectionHub;
-        HeartbeatHub = _heartbeatHub;
+        ConnectionHubContext = connectionHubContext;
+        ConHub = conHub;
     }
+    
+    
+    
 }

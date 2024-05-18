@@ -4,7 +4,7 @@ using MongoDB.Bson.Serialization.Attributes;
 namespace LobbyAPI.Models;
 
 /// <summary>
-/// Represents a lobby object
+///represents a lobby
 /// </summary>
 public class Lobby
 {
@@ -18,6 +18,6 @@ public class Lobby
     [BsonElement("players")]
     public List<Player> Players { get; set; }
     [BsonElement("connectionIdentifier")]
-    public string ConnectionIdentifier { get; set; }
+    public string? ConnectionIdentifier { get; set; }
     
 }

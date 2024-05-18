@@ -12,16 +12,17 @@ public class ServerController : ControllerBase
     private static Random _globalRandom = new Random();
     private readonly ILobbyRepository _lobbyRepo;
     private readonly IPlayerRepository _playerRepo;
-    private readonly ISessionRepository _sessionRepo;
-    private readonly SignalHubs _signals;
+    private readonly ISessionRepository sessionRepo;
+    private readonly IHubOperations HubOp;
+    
     
 
-    public ServerController(IPlayerRepository playerRepo, ISessionRepository sessionRepo,
-        SignalHubs signals)
+    public ServerController(IPlayerRepository playerRepo,
+        IHubOperations _HubOp)
     {
         _playerRepo = playerRepo;
-        _sessionRepo = sessionRepo;
-        _signals = signals;
+        HubOp = _HubOp;
+        sessionRepo = HubOp.RepoManager.SessionRepo;
     }
     
     
@@ -34,10 +35,11 @@ public class ServerController : ControllerBase
         {
             if (string.IsNullOrEmpty(token))
             {
+                Console.WriteLine("Non existent, making new player");
                 token = await newPlayer();
             }
 
-            // Attempt to retrieve the session using the token
+            //attempt to retrieve the session using the token
             newSession = await _playerRepo.GetPlayer(token);
             if (newSession == null)
             {
@@ -46,9 +48,9 @@ public class ServerController : ControllerBase
                 newSession = await _playerRepo.GetPlayer(token);
             }
         
-            Console.WriteLine("GetPlayer");
-            _signals.ConnectionHub.QueueSession(token, newSession.SessionID);
-            await _sessionRepo.SetSession(newSession);
+            Console.WriteLine($"{token} {newSession.SessionID}");
+            HubOp.HubHandler.QueueSession(token, newSession.SessionID);
+            await sessionRepo.SetSession(newSession);
             return newSession;
         }
         catch (Exception ex)
@@ -73,7 +75,7 @@ public class ServerController : ControllerBase
         {
             if (!string.IsNullOrEmpty(token))
             {
-                await _sessionRepo.EndSession(await _playerRepo.GetPlayer(token));
+                await sessionRepo.EndSession(await _playerRepo.GetPlayer(token));
                 Console.WriteLine("logged out");
             }
         }
@@ -86,18 +88,18 @@ public class ServerController : ControllerBase
         return Ok();
     }
 
-    [HttpGet("heartbeat")]
-    public async Task<ActionResult> Heartbeat(Heartbeat heartbeat)
-    {
-        var session = await _sessionRepo.Valid(heartbeat.sessionId);
-        if (!session)
-        {
-            return StatusCode(500);
-        }
-        
-        await Task.Delay(1000);
-        await _signals.HeartbeatHub.SendHeartbeat(heartbeat.sessionId, heartbeat);
-        Console.WriteLine($"send heartbeat {heartbeat.sessionId}");
-        return Ok();
-    }
+    // [HttpGet("heartbeat")]
+    // public async Task<ActionResult> Heartbeat(Heartbeat heartbeat)
+    // {
+    //     var session = await _sessionRepo.Valid(heartbeat.sessionId);
+    //     if (!session)
+    //     {
+    //         return StatusCode(500);
+    //     }
+    //     
+    //     await Task.Delay(1000);
+    //     await _signals.HeartbeatHub.SendHeartbeat(heartbeat.sessionId, heartbeat);
+    //     Console.WriteLine($"send heartbeat {heartbeat.sessionId}");
+    //     return Ok();
+    // }
 }

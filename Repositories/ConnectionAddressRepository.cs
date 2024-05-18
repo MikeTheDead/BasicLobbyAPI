@@ -17,8 +17,12 @@ public class ConnectionAddressRepository : IConnectionAddressRepository
     
     public async Task CreatePair(string hostname, Lobby lobby)
     {
-        var connAdd = new ConnectionAddress(hostname);
+        var connAdd = new ConnectionAddress(hostname,lobby.ConnectionIdentifier);
         await connAddController.Set(connAdd);
-        lobby.ConnectionIdentifier = connAdd.ConnectionIdentifier;
+    }
+
+    public async Task<ConnectionAddress> GetPair(string connectionID)
+    {
+        return await connAddController.Get(connectionID);
     }
 }

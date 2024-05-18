@@ -16,7 +16,7 @@ public class Player
 
     [BsonElement("connectionID")]
     [JsonPropertyName("connectionID")]
-    public string connectionID { get; set; }
+    public string? connectionID { get; set; }
     
     [BsonElement("key")]
     [JsonPropertyName("key")]
