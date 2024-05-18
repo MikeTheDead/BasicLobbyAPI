@@ -3,6 +3,7 @@ using LobbyAPI.Models;
 
 public interface ILobbyRepository
 {
+    Repositories.Repositories repo { get; set; }
     Task<Lobby?> GetLobbyAsync(string name);
     Task<List<Lobby>> GetLobbiesAsync();
     Task<bool> CreateLobbyAsync(Lobby newLobby, string? passkey = null);

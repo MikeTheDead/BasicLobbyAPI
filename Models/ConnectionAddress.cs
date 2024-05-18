@@ -17,9 +17,9 @@ public class ConnectionAddress
     [BsonElement("connectionIdentifier")]
     public string ConnectionIdentifier { get; set; }
 
-    public ConnectionAddress(string _IPAddress)
+    public ConnectionAddress(string _IPAddress, string connectionIdentifier)
     {
         IPAddress = _IPAddress;
-        ConnectionIdentifier = RandomStringGenerator.GenerateRandomString();
+        ConnectionIdentifier = connectionIdentifier;
     }
 }

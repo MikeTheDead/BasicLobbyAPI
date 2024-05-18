@@ -116,7 +116,8 @@ public class SessionMongoController : IMongoSessionExtension
                 {
                     Console.WriteLine("Session not found.");
                 }
-                throw new InvalidOperationException("Session not found or not modified.");
+                Console.WriteLine("Session not changed.");
+                return;
             }
             await UpdatePlayerKey(value);
         }

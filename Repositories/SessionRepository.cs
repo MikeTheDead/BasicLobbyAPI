@@ -70,6 +70,7 @@ public class SessionRepository : ISessionRepository
 
     public async Task EndSession(Session session)
     {
+        
         await sessionMongoController.Remove(session);
     }
 }
