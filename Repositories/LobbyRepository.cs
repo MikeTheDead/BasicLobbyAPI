@@ -8,7 +8,6 @@ using LobbyAPI.Interfaces;
 
 public class LobbyRepository : ILobbyRepository
 {
-
     private readonly IMongoController<Lobby> lobbyMongoController;
     private readonly IPasswordRepository passwordRepository;
 
@@ -17,8 +16,10 @@ public class LobbyRepository : ILobbyRepository
         lobbyMongoController = lobby;
         passwordRepository = _passwordRepository;
     }
-    
-    
+
+
+    public Repositories repo { get; set; }
+
     public async Task<Lobby> GetLobbyAsync(string connectionID)
     {
         return await lobbyMongoController.Get(connectionID);
@@ -38,7 +39,6 @@ public class LobbyRepository : ILobbyRepository
         Lobby? existingLobby = await lobbyMongoController.Get(newLobby.ConnectionIdentifier);
         if (existingLobby == null)
         {
-            Console.WriteLine("CreateLobbyAsync");
             newLobby.Players = new List<Player>();
             newLobby.Players.Add(newLobby.Host);
             newLobby.Locked = false;
@@ -63,6 +63,7 @@ public class LobbyRepository : ILobbyRepository
         {
             Console.WriteLine($"found {oldLobby.LobbyName} : {oldLobby.ConnectionIdentifier}");
             await lobbyMongoController.Put(newLobby);
+            await repo.hubOps.LobbyService.RefreshLobby(newLobby);
             return true;
         }
         return false;
@@ -72,6 +73,7 @@ public class LobbyRepository : ILobbyRepository
         var lobby = await lobbyMongoController.Get(lobbyID);
         if (lobby != null)
         {
+            await repo.hubOps.LobbyService.EndLobby(lobby);
             await lobbyMongoController.Remove(lobby);
             return true;
         }

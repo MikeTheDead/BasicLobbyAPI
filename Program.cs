@@ -7,10 +7,10 @@ using LobbyAPI.MongoCollectionControllers.Interface;
 using LobbyAPI.Repositories;
 using LobbyAPI.SignalRHubs;
 using LobbyAPI.Utilities;
+using Microsoft.AspNetCore.SignalR;
 using MongoDB.Driver;
 
 var builder = WebApplication.CreateBuilder(args);
-
 #region MongoDB
 
 //mongo settings
@@ -74,48 +74,48 @@ builder.Services.AddSingleton<ILobbyRepository>(s =>
     return new LobbyRepository(lobbyStore, pwdRepo);
 });
 
-
+builder.Services.AddSingleton<Repositories>(s =>
+{
+    var sessRepo = s.GetRequiredService<ISessionRepository>();
+    var playerRepo = s.GetRequiredService<IPlayerRepository>();
+    var lobbyRepo = s.GetRequiredService<ILobbyRepository>();
+    var conAddRepo = s.GetRequiredService<IConnectionAddressRepository>();
+    
+    return new Repositories(sessRepo, playerRepo,lobbyRepo,conAddRepo);
+});
 
 #endregion
-
 #region SignalR
-//still need to setup heartbeats
 builder.Services.AddSingleton<HubHandlerService>();
+builder.Services.AddSingleton<IHubOperations, HubOperations>();
+builder.Services.AddSingleton<ILobbyService, LobbyService>();
 builder.Services.AddSingleton<HeartbeatHub>();
-builder.Services.AddSingleton<LobbyHub>();
 
 builder.Services.AddSingleton<ConnectionHub>(s =>
 {
     var hubHandler = s.GetRequiredService<HubHandlerService>();
-    var sessionRepo = s.GetRequiredService<ISessionRepository>();
-    return new ConnectionHub(hubHandler, sessionRepo);
-});
-builder.Services.AddSingleton<LobbyHub>(s =>
-{
-    var sessionRepo = s.GetRequiredService<ISessionRepository>();
-    var connHub = s.GetRequiredService<ConnectionHub>();
-    return new LobbyHub(sessionRepo,connHub);
+    var connectionHubContext = s.GetRequiredService<IHubContext<ConnectionHub>>();
+    var repos = s.GetRequiredService<Repositories>();
+    var lobbyService = s.GetRequiredService<ILobbyService>();
+    return new ConnectionHub(new HubOperations(hubHandler, connectionHubContext,repos, lobbyService));
 });
 
 builder.Services.AddSingleton<SignalHubs>(s =>
 {
-    var connectionHub = s.GetRequiredService<ConnectionHub>();
-    var heartbeatHub = s.GetRequiredService<HeartbeatHub>();
-    var lobbyHub = s.GetRequiredService<LobbyHub>();
-    return new SignalHubs(connectionHub, heartbeatHub, lobbyHub);
+    var connectionHubContext = s.GetRequiredService<IHubContext<ConnectionHub>>();
+    var conHub = s.GetRequiredService<ConnectionHub>();
+    return new SignalHubs(connectionHubContext, conHub);
 });
+
 builder.Services.AddSingleton<ISessionRepository, SessionRepository>();
 
 builder.Services.AddSignalR();
-
 #endregion
 
 builder.Services.AddControllers();
-//signalR
-builder.Services.AddSignalR(o =>
-{
-    o.EnableDetailedErrors = true;
-});
+
+
+
 
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -145,6 +145,7 @@ if (app.Environment.IsDevelopment())
 app.UseEndpoints(ep =>
 {
     ep.MapHub<ConnectionHub>("/connect");
+    ep.MapHub<ConnectionHub>("/lobby");
 });
 
 app.UseHttpsRedirection();

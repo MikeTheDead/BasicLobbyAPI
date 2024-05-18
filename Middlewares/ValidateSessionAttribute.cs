@@ -22,8 +22,11 @@ public class ValidateSessionAttribute : Attribute, IAsyncActionFilter
             return;
         }
         
-        //store for next action 
+        // Store sessionId in HttpContext.Items
         httpContext.Items["SessionID"] = sessionId;
+
+        // Set sessionId in the static class
+        CustomContexts.SessionId = sessionId;
 
         // Log before continuing to the next action
         Console.WriteLine("Session ID before next: " + httpContext.Items["SessionID"]);
@@ -33,4 +36,9 @@ public class ValidateSessionAttribute : Attribute, IAsyncActionFilter
         // Log after all subsequent actions and middlewares have executed
         Console.WriteLine("Session ID after next: " + httpContext.Items["SessionID"]);
     }
+}
+
+public static class CustomContexts
+{
+    public static string SessionId { get; set; }
 }

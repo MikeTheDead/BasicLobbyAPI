@@ -65,6 +65,7 @@ public class LobbyMongoController : IMongoController<Lobby>
             {
                 Console.WriteLine($"No one in Lobby, removing it");
                 await Remove(value);
+                
             }
         }
     }

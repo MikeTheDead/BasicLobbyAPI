@@ -4,7 +4,7 @@ using MongoDB.Bson.Serialization.Attributes;
 namespace LobbyAPI.Models;
 
 /// <summary>
-/// Represents a lobby object
+///represents a lobby
 /// </summary>
 public class Lobby
 {
