@@ -1,4 +1,5 @@
-﻿using LobbyAPI.Interfaces;
+﻿using System.Collections.Concurrent;
+using LobbyAPI.Interfaces;
 using LobbyAPI.Models;
 using LobbyAPI.Utilities;
 using Microsoft.AspNetCore.SignalR;
@@ -11,18 +12,33 @@ public interface IHubOperations
     ILobbyService LobbyService { get; }
     Repositories.Repositories RepoManager { get; }
     HubHandlerService HubHandler { get; }
+    
+
+    #region Connection
     Task TryConnection(string sessionId, IHubCallerClients Clients, HubCallerContext Context);
+    Task SendToken(string connectionId, string sessionId);
+    Task UpdateDetails(Session session);
+    Task SessionUpdate(string sessionId, string connId);
+        #endregion
+    #region Lobby
+
+    Task GetLobbies(HubCallerContext Context);
+    Task SendLobby(string connectionId, Lobby lobby, IHubCallerClients Clients, HubCallerContext Context);
     Task LobbyJoined(string connectionId, string lobbyName);
     Task EnterLobby(string lobbyName, HubCallerContext Context);
     Task BroadcastLobbyHostname(string address, Lobby lobby);
-    Task LeaveLobby(string lobbyName, HubCallerContext Context);
-    Task SendToken(string connectionId, string sessionId);
-    Task ConfirmRequest(ClientResponse response);
-    Task UpdateDetails(Session session);
+    Task LeaveLobby(Lobby _lobby, string token, HubCallerContext Context);
+    
+
+        #endregion
+    #region General
+
     Task SendMessage(string connectionId, string message);
-    Task SendLobby(string connectionId, Lobby lobby, IHubCallerClients Clients, HubCallerContext Context);
-    Task SessionUpdate(string sessionId, string connId);
+    Task ConfirmRequest(ClientResponse response);
     Task EnsureRequest(string method, string sessionId, Func<Task> onSucceeded, Func<Task> onTimeout, int timeoutSeconds = 1);
+    
+
+    #endregion
 }
 
 public class HubOperations : IHubOperations
@@ -31,37 +47,42 @@ public class HubOperations : IHubOperations
     private readonly HubHandlerService _hubHandlerService;
     private readonly IHubContext<ConnectionHub> _connectionHubContext;
     private readonly ILobbyService _lobbyService;
+    private static ConcurrentDictionary<string, int> connectionAttempts = new ConcurrentDictionary<string, int>();
 
-    public HubOperations( 
-        HubHandlerService hubHandlerService, IHubContext<ConnectionHub> connectionHubContext,Repositories.Repositories _repo, ILobbyService lobbyService)
+    public HubOperations(
+        HubHandlerService hubHandlerService, IHubContext<ConnectionHub> connectionHubContext, Repositories.Repositories repo, ILobbyService lobbyService)
     {
         _lobbyService = lobbyService;
-        Repos = _repo;
+        Repos = repo;
         Repos.hubOps = this;
         _hubHandlerService = hubHandlerService;
         _connectionHubContext = connectionHubContext;
+        _lobbyService.HubContext = connectionHubContext;
     }
 
-    #region Exposed Properties
-
     public Repositories.Repositories RepoManager => Repos;
-
     public HubHandlerService HubHandler => _hubHandlerService;
     public ILobbyService LobbyService => _lobbyService;
 
-    #endregion
+    #region Connection Operations
 
-
-
-    #region Player op
-
-    public async Task SessionUpdate(string sessionId, string connectionId)
+    public async Task TryConnection(string sessionId, IHubCallerClients Clients, HubCallerContext Context)
     {
-        Console.WriteLine($"{sessionId} Session Update at {connectionId}");
-        var session = await Repos.SessionRepo.SetConnectionID(sessionId, connectionId);
-        string json = JsonConvert.SerializeObject(session);
-        await _connectionHubContext.Clients.Client(connectionId).SendAsync("UpdateSession", json);
+        if (connectionAttempts.TryGetValue(sessionId, out int tries) && tries >= 5)
+        {
+            Console.WriteLine("TryConnection called too many times");
+            return;
+        }
+
+        tries = connectionAttempts.AddOrUpdate(sessionId, 1, (key, oldValue) => oldValue + 1);
+        Console.WriteLine($"con = {Context.ConnectionId}, tries = {tries}");
+        
+        await Clients.Client(Context.ConnectionId).SendAsync("Connected", "You are connected.");
+        await EnsureRequest("Connected", sessionId,
+            async () => await SendMessage(Context.ConnectionId, "Ping"),
+            async () => await TryConnection(sessionId, Clients, Context), 1);
     }
+
     public async Task SendToken(string connectionId, string sessionId)
     {
         var session = _hubHandlerService.Queue.FirstOrDefault(s => s.SessionId == sessionId);
@@ -74,24 +95,10 @@ public class HubOperations : IHubOperations
             await _connectionHubContext.Clients.Client(connectionId).SendAsync("Error", "Session not found.");
         }
     }
-    public async Task TryConnection(string sessionId, IHubCallerClients Clients, HubCallerContext Context)
-    {
-        var tries = 0;
-        if (tries <= 5)
-        {
-            tries++;
-            Console.WriteLine("con = "+Context.ConnectionId);
-            await Clients.Client(Context.ConnectionId).SendAsync("Connected", "You are connected.");
-            await EnsureRequest("Connected", sessionId,
-                async () => await SendMessage(sessionId, "Ping"),
-                async () => await TryConnection(sessionId,Clients,Context), 1);
-        }
-        else
-        {
-            Console.WriteLine("TryConnection called too many times");
-        }
-    }
+
+    #endregion
     
+    #region General Operations
 
     public async Task ConfirmRequest(ClientResponse response)
     {
@@ -115,56 +122,19 @@ public class HubOperations : IHubOperations
         await Repos.SessionRepo.UpdatePlayerName(session);
         await _connectionHubContext.Clients.Client(session.ConnectionID).SendAsync("RefreshAccount", session.player);
     }
+
+    #endregion
     
+    #region Session Operations
 
-    #endregion
-
-    #region LobbyOps
-    public async Task EnterLobby(string lobbyName, HubCallerContext Context)
+    public async Task SessionUpdate(string sessionId, string connectionId)
     {
-        var lobby = await Repos.LobbyRepo.GetLobbyAsync(lobbyName);
-        if (lobby != null)
-        {
-            var sessionId = Context.GetHttpContext().Request.Query["sessionId"];
-            var session = await Repos.SessionRepo.Get(sessionId);
-            if (session != null)
-            {
-                await _lobbyService.EnterLobby(Context.ConnectionId, lobby);
-            }
-        }
-        
-    }
-    public async Task BroadcastLobbyHostname(string address, Lobby lobby)
-    {
-        await _connectionHubContext.Clients.Group(lobby.LobbyName).SendAsync("ConnectToHost", address);
-
+        Console.WriteLine($"{sessionId} Session Update at {connectionId}");
+        var session = await Repos.SessionRepo.SetConnectionID(sessionId, connectionId);
+        string json = JsonConvert.SerializeObject(session);
+        await _connectionHubContext.Clients.Client(connectionId).SendAsync("UpdateSession", json);
     }
 
-    public async Task LeaveLobby(string lobbyName,HubCallerContext Context)
-    {
-        var sessionId = Context.GetHttpContext().Request.Query["sessionId"];
-        var session = await Repos.SessionRepo.Get(sessionId);
-        if (session != null)
-        {
-            var lobby = new Lobby { LobbyName = lobbyName, Host = session.player }; // Assuming you construct Lobby this way
-            await _lobbyService.LeaveLobby(Context.ConnectionId, lobby);
-        }
-    }
-    public async Task LobbyJoined(string connectionId, string lobbyName)
-    {
-        //await _connectionHubContext.Groups.AddToGroupAsync(connectionId, lobbyName);
-    }
-
-    public async Task SendLobby(string connectionId, Lobby lobby,IHubCallerClients Clients, HubCallerContext Context)
-    {
-        await _lobbyService.EnterLobby(connectionId, lobby);
-        Console.WriteLine($"SendLobby @ {connectionId}"); 
-        //await Clients.Client(connectionId).SendAsync("EnterLobby", lobby);
-    }
-
-    #endregion
-
-    #region General Ops
 
     public async Task SendMessage(string connectionId, string message)
     {
@@ -208,8 +178,100 @@ public class HubOperations : IHubOperations
             };
         }
     }
+    
 
+    #endregion
+    
+    #region Lobby Operations
+
+    public async Task GetLobbies(HubCallerContext Context)
+    {
+        //get
+        List<Lobby> lobbies = new List<Lobby>();
+        lobbies = await Repos.LobbyRepo.GetLobbiesAsync();
+        //convert
+        string json = JsonConvert.SerializeObject(lobbies);
+        
+        //send
+        await _connectionHubContext.Clients.Client(Context.ConnectionId).SendAsync("LobbyList",json);
+    }
+    public async Task EnterLobby(string lobbyName, HubCallerContext Context)
+    {
+        var lobby = await Repos.LobbyRepo.GetLobbyAsync(lobbyName);
+        if (lobby != null)
+        {
+            var sessionId = Context.GetHttpContext().Request.Query["sessionId"];
+            var session = await Repos.SessionRepo.Get(sessionId);
+            if (session != null)
+            {
+                await _lobbyService.EnterLobby(Context.ConnectionId, lobby);
+            }
+        }
+    }
+
+    public async Task BroadcastLobbyHostname(string address, Lobby lobby)
+    {
+        await _connectionHubContext.Clients.Group(lobby.LobbyName).SendAsync("ConnectToHost", address);
+    }
+
+    public async Task LeaveLobby(Lobby _lobby,string token, HubCallerContext Context)
+    {
+        Console.WriteLine("Lobby leave requested. Verifying authenticity");
+        Session? VerifiedSession = await RepoManager.PlayerRepo.GetPlayer(token);
+        if (VerifiedSession == null)
+        {
+            Console.WriteLine($"Player not found. {Context.ConnectionId} is bad actor or critical error has occurred");
+            return;
+        }
+        VerifiedSession.ConnectionID = Context.ConnectionId;
+        Lobby? VerifiedLobby = await RepoManager.LobbyRepo.GetLobbyAsync(_lobby.ConnectionIdentifier);
+        if (VerifiedLobby == null)
+        {
+            Console.WriteLine($"Lobby not found. {Context.ConnectionId} is bad actor or critical error has occurred");
+            return;
+        }
+
+        if (VerifiedLobby.Players.FirstOrDefault(p => p.key == VerifiedSession.player.key) == null)
+        {
+            Console.WriteLine($"{Context.ConnectionId} is not in this lobby");
+            return;
+        }
+        Console.WriteLine($"Authentication complete, removing {VerifiedSession.player.playerName} from {VerifiedLobby.LobbyName}");
+        VerifiedLobby.Players.Remove(VerifiedLobby.Players.FirstOrDefault(p=>p.key == VerifiedSession.player.key));
+        if (VerifiedLobby.Host.key == VerifiedSession.player.key)
+        {
+            Console.WriteLine($"Player is Host, check for other players");
+            Player? transfer = VerifiedLobby.Players.FirstOrDefault();
+            if (transfer != null)
+            {
+                Console.WriteLine($"Lobby is not empty. {transfer.playerName} is the new host");
+                VerifiedLobby.Host = transfer;
+            }
+            else
+            {
+                Console.WriteLine($"No one else in lobby, deleting.");
+                await RepoManager.LobbyRepo.DeleteLobbyAsync(VerifiedLobby.ConnectionIdentifier);
+                
+                await LobbyService.HandleLobbyLeave(VerifiedLobby, VerifiedSession);
+                return;
+            }
+        }
+        await RepoManager.LobbyRepo.UpdateLobbyAsync(VerifiedLobby);
+        await LobbyService.HandleLobbyLeave(VerifiedLobby, VerifiedSession);
+    }
+    public async Task LobbyJoined(string connectionId, string lobbyName)
+    {
+        await _connectionHubContext.Groups.AddToGroupAsync(connectionId, lobbyName);
+    }
+
+    public async Task SendLobby(string connectionId, Lobby lobby, IHubCallerClients Clients, HubCallerContext Context)
+    {
+        await _lobbyService.EnterLobby(connectionId, lobby);
+        Console.WriteLine($"SendLobby @ {connectionId}");
+        // await Clients.Client(connectionId).SendAsync("EnterLobby", lobby);
+    }
 
     #endregion
 }
+
 

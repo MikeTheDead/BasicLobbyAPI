@@ -20,9 +20,9 @@ public class LobbyRepository : ILobbyRepository
 
     public Repositories repo { get; set; }
 
-    public async Task<Lobby> GetLobbyAsync(string connectionID)
+    public async Task<Lobby> GetLobbyAsync(string connectionIdentifier)
     {
-        return await lobbyMongoController.Get(connectionID);
+        return await lobbyMongoController.Get(connectionIdentifier);
     }
 
     public async Task<List<Lobby>> GetLobbiesAsync()
@@ -73,7 +73,6 @@ public class LobbyRepository : ILobbyRepository
         var lobby = await lobbyMongoController.Get(lobbyID);
         if (lobby != null)
         {
-            await repo.hubOps.LobbyService.EndLobby(lobby);
             await lobbyMongoController.Remove(lobby);
             return true;
         }

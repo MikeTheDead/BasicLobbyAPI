@@ -5,6 +5,7 @@ using LobbyAPI.SignalRHubs;
 using LobbyAPI.Utilities;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
+using Newtonsoft.Json;
 
 namespace LobbyAPI.Controllers;
 
@@ -46,7 +47,9 @@ public class LobbyController : ControllerBase
     {
         try
         {
-            return Ok(await _lobbyRepo.GetLobbiesAsync());
+            var lobbies = await _lobbyRepo.GetLobbiesAsync();
+            var json = JsonConvert.SerializeObject(lobbies);
+            return Ok(json);
         }
         catch (Exception ex)
         {
@@ -185,59 +188,72 @@ public class LobbyController : ControllerBase
             return StatusCode(500, "An error occurred while trying to join the lobby.");
         }
     }
-    
-    [HttpPost("{connectionID}/leave")]
-    public async Task<ActionResult> LeaveLobby(string connectionID, [FromQuery] string token)
-    {
-        try
-        {
-            var lobby = await _lobbyRepo.GetLobbyAsync(connectionID);
-            if (lobby == null)
-            {
-                return NotFound($"Lobby {connectionID} not found.");
-            }
-            Session? session = await _playerRepo.GetPlayer(token);
-            if (session == null)
-            {
-                return NotFound("Session not found.");
-            }
 
-            Player player = session.player;
+    #region leave
 
-            //Add ownership transfer later
-            if (lobby.Host == player)
-            {
-                bool taskStatus = await _lobbyRepo.DeleteLobbyAsync(lobby.LobbyName);
-                if (taskStatus)
-                {
-                    return Ok();
-                }
-            }
-            
-            if (lobby.Players.Any(p => p.key == player.key))
-            {
-                var updatedPlayers = lobby.Players.Where(p => p.key != player.key).ToList();
-                lobby.Players = updatedPlayers;  // Assigning a new list might help
-                Console.WriteLine($"removed {player.playerName}, updating lobby");
-                bool updateStatus = await _lobbyRepo.UpdateLobbyAsync(lobby);
-                if (updateStatus)
-                {
-                    return Ok();
-                }
-            }
+    // [HttpPost("{connectionID}/leave")]
+    // public async Task<ActionResult> LeaveLobby(string connectionID, [FromQuery] string token)
+    // {
+    //     try
+    //     {
+    //         var lobby = await _lobbyRepo.GetLobbyAsync(connectionID);
+    //         if (lobby == null)
+    //         {
+    //             return NotFound($"Lobby {connectionID} not found.");
+    //         }
+    //
+    //         var session = await _playerRepo.GetPlayer(token);
+    //         if (session == null)
+    //         {
+    //             return NotFound("Session not found.");
+    //         }
+    //
+    //         var player = session.player;
+    //         _logger.LogInformation($"{player.playerName} is trying to leave {lobby.LobbyName}");
+    //
+    //         // Handle if the player is the host
+    //         if (lobby.Host.key == player.key)
+    //         {
+    //             _logger.LogInformation($"{player.playerName} is the host of {lobby.LobbyName}");
+    //
+    //             // Optionally, you could implement logic to transfer host responsibilities here.
+    //             // For simplicity, we will end the lobby if the host leaves.
+    //             await _hubOperations.EndLobby(lobby);
+    //             var taskStatus = await _lobbyRepo.DeleteLobbyAsync(lobby.LobbyName);
+    //             if (taskStatus)
+    //             {
+    //                 return Ok();
+    //             }
+    //             return StatusCode(500, "Failed to delete the lobby.");
+    //         }
+    //
+    //         // Remove the player from the lobby
+    //         var playerInLobby = lobby.Players.FirstOrDefault(p => p.key == player.key);
+    //         if (playerInLobby == null)
+    //         {
+    //             return StatusCode(500, "You're not in that lobby.");
+    //         }
+    //
+    //         await _hubOperations.LobbyService.LeaveLobby(player.connectionID, lobby);
+    //         lobby.Players.Remove(playerInLobby);
+    //         _logger.LogInformation($"Removed {player.playerName}, updating lobby");
+    //
+    //         var updateStatus = await _lobbyRepo.UpdateLobbyAsync(lobby);
+    //         if (updateStatus)
+    //         {
+    //             return Ok();
+    //         }
+    //
+    //         return StatusCode(500, "Failed to update the lobby.");
+    //     }
+    //     catch (Exception ex)
+    //     {
+    //         _logger.LogError(ex, "Error trying to leave the lobby.");
+    //         return StatusCode(500, "An error occurred while trying to leave the lobby.");
+    //     }
+    // }
 
-
-            return StatusCode(500, "You're not in that lobby");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error trying to join the lobby.");
-            return StatusCode(500, "An error occurred while trying to join the lobby.");
-        }
-    }
-    
-    
-    
+    #endregion
     [HttpDelete("lobby/{lobbyName}")]
     public async Task<ActionResult> DeleteLobby(string lobbyName, string token)
     {

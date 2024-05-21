@@ -10,8 +10,10 @@ public interface IConnectionHub
     Task ConfirmRequest(ClientResponse response);
     Task UpdateDetails(Session session);
     Task SessionUpdate(string sessionId);
+    Task GetLobbies();
     Task SendLobby(string connId, Lobby lobby);
     Task EnterLobby(string lobbyName);
     Task BroadcastLobbyHostname(string lobbyName, string hostToken);
-    Task LeaveLobby(string lobbyName);
+    Task LeaveLobby(Lobby lobby, string token);
+    Task InvokeRefresh(Lobby  lobby);
 }
