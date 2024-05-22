@@ -5,6 +5,7 @@ namespace LobbyAPI.Interfaces;
 public interface IMongoSessionExtension
 {
     Task<Session?> Get(string value);
+    Task<Session?> GetViaConnectionId(string value);
     Task<List<Session>> GetAll();
     Task Set(Session value);
     Task PutConnectionID(Session value);
@@ -12,4 +13,5 @@ public interface IMongoSessionExtension
     Task Remove(Session value);
     public Task<PlayerKey> GetKVPOfSession(Session value);
     public Task SubmitPlayerUpdate(Session session);
+    public Task SubmitUpdate(Session session);
 }

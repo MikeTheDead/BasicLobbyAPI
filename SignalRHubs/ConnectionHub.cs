@@ -146,10 +146,10 @@ public class ConnectionHub : Hub, IConnectionHub
     /// <summary>
     /// Called when entering a lobby
     /// </summary>
-    /// <param name="lobbyName"></param>
-    public async Task EnterLobby(string lobbyName)
+    /// <param name="_connId"></param>
+    public async Task EnterLobby(string _connId)
     {
-        await _hubOperations.EnterLobby(lobbyName, Context);
+        await _hubOperations.EnterLobby(_connId, Context);
     }
 /// <summary>
 /// Called when player leaves lobby
@@ -164,24 +164,14 @@ public class ConnectionHub : Hub, IConnectionHub
 /// <summary>
 /// Called when host starts the Net-code for Game Objects connection
 /// </summary>
-/// <param name="lobbyName"></param>
+/// <param name="lobbyConnID"></param>
 /// <param name="hostToken"></param>
-    public async Task BroadcastLobbyHostname(string lobbyName, string hostToken)
+    public async Task BroadcastLobbyHostname(string lobbyConnID, string hostToken)
     {
-        var session = await Repos.PlayerRepo.GetPlayer(hostToken);
-        var lobby = await Repos.LobbyRepo.GetLobbyAsync(lobbyName);
-        if (session != null && lobby != null)
-        {
-            if (lobby.Host.key == session.player.key)
-            {
-                var address = await Repos.ConAddRepo.GetPair(lobby.ConnectionIdentifier);
-                if (address != null)
-                {
-                    await _hubOperations.BroadcastLobbyHostname(address.IPAddress, lobby);
-                }
-            }
-        }
+        await _hubOperations.BroadcastLobbyHostname(lobbyConnID, hostToken);
     }
+
+
 /// <summary>
 /// seemingly same as EnterLobby
 /// Need to check and see if this is still used.
@@ -192,6 +182,22 @@ public class ConnectionHub : Hub, IConnectionHub
     {
         await _hubOperations.SendLobby(connId, lobby, Clients, Context);
     }
+
+    #endregion
+
+    #region NGO
+    
+    public async Task NGO_ClientConnected(string clientId)
+    {
+        await _hubOperations.NGO_ClientConnected(clientId, Context);
+    }
+
+    
+    public async Task NGO_ClientDisconnected(string clientId)
+    {
+        await _hubOperations.NGO_ClientDisconnected(clientId, Context);
+    }
+
 
     #endregion
 

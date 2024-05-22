@@ -6,8 +6,10 @@ public interface ISessionRepository
     public Task<bool> Valid(string sessionId);
     public Task<bool> Valid(string sessionId, Player player);
     public Task<Session> Get(string sessionId);
+    public Task<Session> GetCID(string sessionId);
     public Task SetSession(Session session);
     public Task EndSession(Session session);
     public Task<Session> SetConnectionID(string sessionId, string connectionId);
     public Task UpdatePlayerName(Session session);
+    public Task UpdateCid(Session session);
 }

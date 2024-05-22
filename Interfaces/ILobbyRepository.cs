@@ -5,6 +5,7 @@ public interface ILobbyRepository
 {
     Repositories.Repositories repo { get; set; }
     Task<Lobby?> GetLobbyAsync(string connectionIdentifier);
+    Task<Lobby> GetPlayersLobby(string value);
     Task<List<Lobby>> GetLobbiesAsync();
     Task<bool> CreateLobbyAsync(Lobby newLobby, string? passkey = null);
     Task<bool> UpdateLobbyAsync(Lobby newLobby);

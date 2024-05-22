@@ -51,7 +51,7 @@ namespace LobbyAPI.SignalRHubs
             Console.WriteLine($"Remove {VerifiedSession.player.playerName} from the signalR group.");
             await _connectionHubContext.Groups.RemoveFromGroupAsync(VerifiedSession.SessionID, VerifiedLobby.LobbyName);
             Console.WriteLine($"Finally send everyone else the refresh callback.");
-            await _connectionHubContext.Clients.Group(VerifiedLobby.LobbyName).SendAsync("RefreshLobby");
+            //await RefreshLobby(VerifiedLobby);
         }
 
         public async Task EndLobby(Lobby lobby)
@@ -59,7 +59,7 @@ namespace LobbyAPI.SignalRHubs
             await _connectionHubContext.Clients.Group(lobby.LobbyName).SendAsync("LobbyLeft", lobby);
         }
 
-        public async Task RefreshLobby(Lobby  lobby)
+        public async Task RefreshLobby(Lobby lobby)
         {
             Lobby lobbyData = await lobbyRepo.GetLobbyAsync(lobby.ConnectionIdentifier);
             await _connectionHubContext.Clients.Group(lobby.LobbyName).SendAsync("RefreshLobby",lobbyData);

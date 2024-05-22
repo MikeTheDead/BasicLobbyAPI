@@ -29,14 +29,20 @@ builder.Services.AddSingleton(database.GetCollection<Lobby>("Lobbies"));
 builder.Services.AddSingleton(database.GetCollection<Password>("Passwords"));
 builder.Services.AddSingleton(database.GetCollection<Session>("Sessions"));
 builder.Services.AddSingleton(database.GetCollection<ConnectionAddress>("ConnAdds"));
+// Mongo controllers
+builder.Services.AddSingleton<IMongoController<Player>, PlayerMongoController>();
+builder.Services.AddSingleton<IMongoController<PlayerKey>, PlayerKeyMongoController>();
+builder.Services.AddSingleton<IMongoController<Password>, PasswordMongoController>();
+builder.Services.AddSingleton<IMongoController<ConnectionAddress>, ConnectionAddressMongoController>();
 
-//mongo controllers 
-builder.Services.AddSingleton<IMongoController<Player>,PlayerMongoController>();
-builder.Services.AddSingleton<IMongoController<PlayerKey>,PlayerKeyMongoController>();
-builder.Services.AddSingleton<IMongoController<Lobby>,LobbyMongoController>();
-builder.Services.AddSingleton<IMongoController<Password>,PasswordMongoController>();
-builder.Services.AddSingleton<IMongoSessionExtension,SessionMongoController>();
-builder.Services.AddSingleton<IMongoController<ConnectionAddress>,ConnectionAddressMongoController>();
+// Extras
+builder.Services.AddSingleton<LobbyMongoController>();
+
+// Register interfaces to use the singleton instance of LobbyMongoController
+builder.Services.AddSingleton<ILobbyMongoControllerExtensions, LobbyMongoController>(provider => provider.GetRequiredService<LobbyMongoController>());
+builder.Services.AddSingleton<IMongoController<Lobby>, LobbyMongoController>(provider => provider.GetRequiredService<LobbyMongoController>());
+
+builder.Services.AddSingleton<IMongoSessionExtension, SessionMongoController>();
 
 
 #endregion
@@ -70,8 +76,9 @@ builder.Services.AddSingleton<IConnectionAddressRepository>(s =>
 builder.Services.AddSingleton<ILobbyRepository>(s =>
 {
     var lobbyStore = s.GetRequiredService<IMongoController<Lobby>>();
+    var lobbyExt = s.GetRequiredService<ILobbyMongoControllerExtensions>();
     var pwdRepo = s.GetRequiredService<IPasswordRepository>();
-    return new LobbyRepository(lobbyStore, pwdRepo);
+    return new LobbyRepository(lobbyStore,lobbyExt, pwdRepo);
 });
 
 builder.Services.AddSingleton<Repositories>(s =>

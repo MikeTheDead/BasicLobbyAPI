@@ -16,6 +16,9 @@ public class Session
     [BsonElement("player")]
     public Player player { get; set; }
 
+    [BsonElement("NGOClientID")] 
+    public string? NGOClientID { get; set; } = "0";
+
     public Session()
     {
         SessionID = Guid.NewGuid().ToString();

@@ -9,12 +9,14 @@ using LobbyAPI.Interfaces;
 public class LobbyRepository : ILobbyRepository
 {
     private readonly IMongoController<Lobby> lobbyMongoController;
+    private readonly ILobbyMongoControllerExtensions lobbyExt;
     private readonly IPasswordRepository passwordRepository;
 
-    public LobbyRepository(IMongoController<Lobby> lobby, IPasswordRepository _passwordRepository)
+    public LobbyRepository(IMongoController<Lobby> lobby, ILobbyMongoControllerExtensions _lobbyExt, IPasswordRepository _passwordRepository)
     {
         lobbyMongoController = lobby;
         passwordRepository = _passwordRepository;
+        lobbyExt = _lobbyExt;
     }
 
 
@@ -23,6 +25,16 @@ public class LobbyRepository : ILobbyRepository
     public async Task<Lobby> GetLobbyAsync(string connectionIdentifier)
     {
         return await lobbyMongoController.Get(connectionIdentifier);
+    }
+    
+    /// <summary>
+    /// Get the lobby this player is in
+    /// </summary>
+    /// <param name="value"></param>
+    /// <returns></returns>
+    public async Task<Lobby> GetPlayersLobby(string value)
+    {
+        return await lobbyExt.GetLobbyOfPlayer(value);
     }
 
     public async Task<List<Lobby>> GetLobbiesAsync()

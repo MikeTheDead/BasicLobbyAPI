@@ -25,6 +25,15 @@ public class SessionMongoController : IMongoSessionExtension
         return result;
     }
 
+    public async Task<Session?> GetViaConnectionId(string value)
+    {
+        var builder = Builders<Session>.Filter;
+        var filter = builder.Eq(p => p.ConnectionID, value);
+
+        var result = await sessionCollection.Find(filter).FirstOrDefaultAsync();
+        return result;
+    }
+
     public Task<List<Session>> GetAll()
     {
         throw new NotImplementedException();
@@ -173,6 +182,51 @@ public class SessionMongoController : IMongoSessionExtension
     {
         await PutPlayer(session);
         
+    }
+
+    public async Task SubmitUpdate(Session session)
+    {
+        await PutClientID(session);
+    }
+    public async Task PutClientID(Session value)
+    {
+        try
+        {
+            if (value == null)
+            {
+                throw new ArgumentNullException(nameof(value), "Session value cannot be null.");
+            }
+
+            var filter = Builders<Session>.Filter.Eq(l => l.SessionID, value.SessionID);
+            var update = Builders<Session>.Update.Set(l => l.NGOClientID, value.NGOClientID);
+            var updateResult = await sessionCollection.UpdateOneAsync(filter, update);
+            Console.WriteLine($"Matched Count: {updateResult.MatchedCount}, Modified Count: {updateResult.ModifiedCount}");
+
+            if (updateResult.ModifiedCount == 0)
+            {
+                Console.WriteLine("No documents were modified. Checking if the session exists with the same player.");
+
+                var existingSession = await sessionCollection.Find(filter).FirstOrDefaultAsync();
+                if (existingSession != null)
+                {
+                    if (existingSession.player.Equals(value.player))
+                    {
+                        Console.WriteLine($"{value.player.playerName} already has ClientID set");
+                        return;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Session not found.");
+                }
+                Console.WriteLine("Session not changed.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"An error occurred: {ex.Message}");
+            throw;
+        }
     }
 
     public async Task Remove(Session value)

@@ -39,6 +39,17 @@ public class SessionRepository : ISessionRepository
         }
         return session;
     }
+    public async Task<Session> GetCID(string sessionId)
+    {
+        Session? session = await sessionMongoController.GetViaConnectionId(sessionId);
+        if (session == null)
+        {
+            Console.WriteLine($"failed: {sessionId}");
+            return null;
+        }
+        return session;
+    }
+    
     public async Task<Session?> SetConnectionID(string sessionId,string connectionId)
     {
         Console.WriteLine("SettConnID");
@@ -61,6 +72,10 @@ public class SessionRepository : ISessionRepository
         session.player.playerName = _session.player.playerName;
         session.player.connectionID = _session.ConnectionID;
         await sessionMongoController.SubmitPlayerUpdate(session);
+    }
+    public async Task UpdateCid(Session session)
+    {
+        await sessionMongoController.SubmitUpdate(session);
     }
 
     public async Task SetSession(Session session)

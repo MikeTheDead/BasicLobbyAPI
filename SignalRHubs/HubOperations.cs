@@ -25,12 +25,19 @@ public interface IHubOperations
     Task GetLobbies(HubCallerContext Context);
     Task SendLobby(string connectionId, Lobby lobby, IHubCallerClients Clients, HubCallerContext Context);
     Task LobbyJoined(string connectionId, string lobbyName);
-    Task EnterLobby(string lobbyName, HubCallerContext Context);
-    Task BroadcastLobbyHostname(string address, Lobby lobby);
+    Task EnterLobby(string _connId, HubCallerContext Context);
+    Task BroadcastLobbyHostname(string lobbyConnID, string hostToken);
     Task LeaveLobby(Lobby _lobby, string token, HubCallerContext Context);
-    
+    #endregion
 
-        #endregion
+    #region Netcode for Gameobjects
+
+    Task NGO_ClientConnected(string clientId, HubCallerContext ctx);
+        
+    Task NGO_ClientDisconnected(string clientId, HubCallerContext ctx);
+        
+
+    #endregion
     #region General
 
     Task SendMessage(string connectionId, string message);
@@ -195,24 +202,55 @@ public class HubOperations : IHubOperations
         //send
         await _connectionHubContext.Clients.Client(Context.ConnectionId).SendAsync("LobbyList",json);
     }
-    public async Task EnterLobby(string lobbyName, HubCallerContext Context)
+    public async Task EnterLobby(string _connId, HubCallerContext Context)
     {
-        var lobby = await Repos.LobbyRepo.GetLobbyAsync(lobbyName);
-        if (lobby != null)
+        var lobby = await Repos.LobbyRepo.GetLobbyAsync(_connId);
+        if (lobby == null)
         {
-            var sessionId = Context.GetHttpContext().Request.Query["sessionId"];
-            var session = await Repos.SessionRepo.Get(sessionId);
-            if (session != null)
-            {
-                await _lobbyService.EnterLobby(Context.ConnectionId, lobby);
-            }
+            return;
         }
+        var sessionId = Context.GetHttpContext().Request.Query["sessionId"];
+        var session = await Repos.SessionRepo.Get(sessionId);
+        if (session == null)
+        {
+            return;
+        }
+        await _lobbyService.EnterLobby(Context.ConnectionId, lobby);
     }
 
-    public async Task BroadcastLobbyHostname(string address, Lobby lobby)
+    public async Task BroadcastLobbyHostname(string lobbyConnID, string hostToken)
     {
-        await _connectionHubContext.Clients.Group(lobby.LobbyName).SendAsync("ConnectToHost", address);
+        Console.WriteLine("Host submitted a connection request");
+        var session = await Repos.PlayerRepo.GetPlayer(hostToken);
+        if (session == null)
+        {
+            Console.WriteLine("Token invalid!");
+            return;
+        }
+        var lobby = await Repos.LobbyRepo.GetLobbyAsync(lobbyConnID);
+        if (lobby == null)
+        {
+            Console.WriteLine("Lobby invalid!");
+            return;
+        }
+        
+        Console.WriteLine("Verify host and lobby");
+        if (lobby.Host.key != session.player.key)
+        {
+            Console.WriteLine("Not the host!");
+            return;
+        }
+        
+        Console.WriteLine("Verified! Broadcast address");
+        var address = await Repos.ConAddRepo.GetPair(lobby.ConnectionIdentifier);
+        if (string.IsNullOrEmpty(address.IPAddress))
+        {
+            Console.WriteLine("Host address invalid!");
+            return;
+        }
+        await _connectionHubContext.Clients.Group(lobby.LobbyName).SendAsync("ConnectToHost", address.IPAddress);
     }
+
 
     public async Task LeaveLobby(Lobby _lobby,string token, HubCallerContext Context)
     {
@@ -225,20 +263,22 @@ public class HubOperations : IHubOperations
         }
         VerifiedSession.ConnectionID = Context.ConnectionId;
         Lobby? VerifiedLobby = await RepoManager.LobbyRepo.GetLobbyAsync(_lobby.ConnectionIdentifier);
+        
         if (VerifiedLobby == null)
         {
             Console.WriteLine($"Lobby not found. {Context.ConnectionId} is bad actor or critical error has occurred");
             return;
         }
 
-        if (VerifiedLobby.Players.FirstOrDefault(p => p.key == VerifiedSession.player.key) == null)
+        Player? lobbyPlayer = VerifiedLobby.Players.FirstOrDefault(p => p.key == VerifiedSession.player.key);
+        if (lobbyPlayer == null)
         {
-            Console.WriteLine($"{Context.ConnectionId} is not in this lobby");
+            Console.WriteLine($"{Context.ConnectionId} is not in this lobby ({VerifiedSession.ConnectionID})");
             return;
         }
         Console.WriteLine($"Authentication complete, removing {VerifiedSession.player.playerName} from {VerifiedLobby.LobbyName}");
-        VerifiedLobby.Players.Remove(VerifiedLobby.Players.FirstOrDefault(p=>p.key == VerifiedSession.player.key));
-        if (VerifiedLobby.Host.key == VerifiedSession.player.key)
+        VerifiedLobby.Players.Remove(lobbyPlayer);
+        if (VerifiedLobby.Host.key == lobbyPlayer.key)
         {
             Console.WriteLine($"Player is Host, check for other players");
             Player? transfer = VerifiedLobby.Players.FirstOrDefault();
@@ -269,6 +309,38 @@ public class HubOperations : IHubOperations
         await _lobbyService.EnterLobby(connectionId, lobby);
         Console.WriteLine($"SendLobby @ {connectionId}");
         // await Clients.Client(connectionId).SendAsync("EnterLobby", lobby);
+    }
+
+    #endregion
+
+    #region Netcode for Gameobjects
+
+    
+    public async Task NGO_ClientConnected(string clientId, HubCallerContext ctx)
+    {
+        Session session = await Repos.SessionRepo.GetCID(ctx.ConnectionId);
+        if (string.IsNullOrEmpty(session.SessionID))
+        {
+            return;
+        }
+
+        session.NGOClientID = clientId;
+
+        await Repos.SessionRepo.UpdateCid(session);
+        var lobby = await Repos.LobbyRepo.GetPlayersLobby(ctx.ConnectionId);
+        if (lobby == null)
+        {
+            Console.WriteLine("Lobby error");
+            return;
+        }
+
+        await _connectionHubContext.Clients.Group(lobby.LobbyName).SendAsync("NGO_ClientConnectedCallback", session.player);
+
+    }
+    
+    public async Task NGO_ClientDisconnected(string clientId, HubCallerContext ctx)
+    {
+        
     }
 
     #endregion
